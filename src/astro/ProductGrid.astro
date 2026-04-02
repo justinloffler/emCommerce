@@ -1,0 +1,78 @@
+---
+/**
+ * ProductGrid — Responsive grid of ProductCard components.
+ */
+import ProductCard from "./ProductCard.astro";
+
+interface ProductItem {
+	id: string;
+	name: string;
+	slug: string;
+	imageUrl?: string;
+	unitPrice: number;
+	originalPrice?: number;
+}
+
+interface Props {
+	products: ProductItem[];
+	currencySymbol?: string;
+	basePath?: string;
+	columns?: 2 | 3 | 4;
+	class?: string;
+}
+
+const {
+	products,
+	currencySymbol = "$",
+	basePath = "/products/",
+	columns = 3,
+	class: className = "",
+} = Astro.props;
+---
+
+<div class:list={["ec-product-grid", `ec-product-grid--cols-${columns}`, className]}>
+	{products.map((product) => (
+		<ProductCard
+			id={product.id}
+			name={product.name}
+			slug={product.slug}
+			imageUrl={product.imageUrl}
+			unitPrice={product.unitPrice}
+			originalPrice={product.originalPrice}
+			currencySymbol={currencySymbol}
+			basePath={basePath}
+		/>
+	))}
+</div>
+
+{products.length === 0 && (
+	<p class="ec-product-grid__empty">No products found.</p>
+)}
+
+<style>
+	.ec-product-grid {
+		display: grid;
+		gap: 1.5rem;
+	}
+	.ec-product-grid--cols-2 { grid-template-columns: repeat(2, 1fr); }
+	.ec-product-grid--cols-3 { grid-template-columns: repeat(3, 1fr); }
+	.ec-product-grid--cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+	@media (max-width: 768px) {
+		.ec-product-grid--cols-3,
+		.ec-product-grid--cols-4 {
+			grid-template-columns: repeat(2, 1fr);
+		}
+	}
+	@media (max-width: 480px) {
+		.ec-product-grid {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	.ec-product-grid__empty {
+		text-align: center;
+		color: var(--ec-color-muted, #6b7280);
+		padding: 3rem 1rem;
+	}
+</style>

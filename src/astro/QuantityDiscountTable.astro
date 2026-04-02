@@ -1,0 +1,83 @@
+---
+/**
+ * QuantityDiscountTable — Shows tiered pricing breaks (PrestaShop-style).
+ */
+interface QuantityBreak {
+	fromQuantity: number;
+	unitPrice: number;
+	savings: number;
+	savingsPercent: number;
+}
+
+interface Props {
+	breaks: QuantityBreak[];
+	currencySymbol?: string;
+	decimalPlaces?: number;
+	class?: string;
+}
+
+const {
+	breaks,
+	currencySymbol = "$",
+	decimalPlaces = 2,
+	class: className = "",
+} = Astro.props;
+
+function fmt(cents: number): string {
+	if (decimalPlaces === 0) return `${currencySymbol}${cents}`;
+	const d = Math.pow(10, decimalPlaces);
+	return `${currencySymbol}${Math.floor(cents / d)}.${String(cents % d).padStart(decimalPlaces, "0")}`;
+}
+
+function pct(basisPoints: number): string {
+	return `${(basisPoints / 100).toFixed(0)}%`;
+}
+---
+
+{breaks.length > 0 && (
+	<table class:list={["ec-qty-table", className]}>
+		<thead>
+			<tr>
+				<th>Quantity</th>
+				<th>Price</th>
+				<th>Savings</th>
+			</tr>
+		</thead>
+		<tbody>
+			{breaks.map((b) => (
+				<tr>
+					<td>{b.fromQuantity}+</td>
+					<td>{fmt(b.unitPrice)}</td>
+					<td class="ec-qty-table__savings">-{pct(b.savingsPercent)}</td>
+				</tr>
+			))}
+		</tbody>
+	</table>
+)}
+
+<style>
+	.ec-qty-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.875rem;
+		margin: 1rem 0;
+	}
+	.ec-qty-table th {
+		text-align: left;
+		padding: 0.5rem;
+		border-bottom: 2px solid var(--ec-color-border, #e5e7eb);
+		font-weight: 600;
+		color: var(--ec-color-muted, #6b7280);
+		font-size: 0.75rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+	.ec-qty-table td {
+		padding: 0.5rem;
+		border-bottom: 1px solid var(--ec-color-border, #e5e7eb);
+	}
+	.ec-qty-table__savings {
+		color: var(--ec-color-sale, #dc2626);
+		font-weight: 600;
+	}
+</style>

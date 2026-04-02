@@ -1,0 +1,181 @@
+---
+/**
+ * ProductDetailPage — Ready-to-use product detail page.
+ * Composes ImageGallery, VariantSelector, PriceDisplay, QuantityDiscountTable, AddToCart.
+ */
+import ImageGallery from "../ImageGallery.astro";
+import VariantSelector from "../VariantSelector.astro";
+import PriceDisplay from "../PriceDisplay.astro";
+import QuantityDiscountTable from "../QuantityDiscountTable.astro";
+import AddToCart from "../AddToCart.astro";
+import CartDrawer from "../CartDrawer.astro";
+
+interface VariantOption {
+	id: string;
+	attributes: Record<string, string>;
+	price: number | null;
+	enabled: boolean;
+	imageId: string | null;
+}
+
+interface QuantityBreak {
+	fromQuantity: number;
+	unitPrice: number;
+	savings: number;
+	savingsPercent: number;
+}
+
+interface Props {
+	id: string;
+	name: string;
+	description: string;
+	shortDescription?: string;
+	images: Array<{ url: string; alt?: string }>;
+	unitPrice: number;
+	originalPrice?: number;
+	currencySymbol?: string;
+	attributes?: Array<{ name: string; values: string[] }>;
+	variants?: VariantOption[];
+	quantityBreaks?: QuantityBreak[];
+	sku?: string | null;
+	inStock?: boolean;
+	showCartDrawer?: boolean;
+}
+
+const {
+	id,
+	name,
+	description,
+	shortDescription,
+	images,
+	unitPrice,
+	originalPrice,
+	currencySymbol = "$",
+	attributes = [],
+	variants = [],
+	quantityBreaks = [],
+	sku,
+	inStock = true,
+	showCartDrawer = true,
+} = Astro.props;
+
+const hasVariants = variants.length > 0;
+const defaultVariant = hasVariants ? variants.find((v) => v.enabled) : null;
+---
+
+<div class="ec-page ec-page--product-detail">
+	<div class="ec-product-detail">
+		<div class="ec-product-detail__gallery">
+			<ImageGallery images={images} />
+		</div>
+
+		<div class="ec-product-detail__info">
+			<h1 class="ec-product-detail__name">{name}</h1>
+
+			{sku && <p class="ec-product-detail__sku">SKU: {sku}</p>}
+
+			<PriceDisplay
+				unitPrice={unitPrice}
+				originalPrice={originalPrice}
+				currencySymbol={currencySymbol}
+				class="ec-product-detail__price"
+			/>
+
+			{shortDescription && (
+				<p class="ec-product-detail__short-desc">{shortDescription}</p>
+			)}
+
+			{hasVariants && (
+				<VariantSelector
+					productId={id}
+					attributes={attributes}
+					variants={variants}
+					class="ec-product-detail__variants"
+				/>
+			)}
+
+			{quantityBreaks.length > 0 && (
+				<QuantityDiscountTable
+					breaks={quantityBreaks}
+					currencySymbol={currencySymbol}
+					class="ec-product-detail__qty-table"
+				/>
+			)}
+
+			{inStock ? (
+				<AddToCart
+					productId={id}
+					variantId={defaultVariant?.id}
+					class="ec-product-detail__add"
+				/>
+			) : (
+				<p class="ec-product-detail__out-of-stock">Out of Stock</p>
+			)}
+
+			<slot name="below-add-to-cart" />
+		</div>
+	</div>
+
+	{description && (
+		<section class="ec-product-detail__description">
+			<h2>Description</h2>
+			<div set:html={description} />
+		</section>
+	)}
+
+	<slot name="below-description" />
+</div>
+
+{showCartDrawer && <CartDrawer currencySymbol={currencySymbol} />}
+
+<style>
+	.ec-page--product-detail {
+		max-width: 72rem;
+		margin: 0 auto;
+		padding: 2rem 1rem;
+	}
+	.ec-product-detail {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 2.5rem;
+		margin-bottom: 3rem;
+	}
+	@media (max-width: 768px) {
+		.ec-product-detail { grid-template-columns: 1fr; }
+	}
+	.ec-product-detail__name {
+		font-size: 1.75rem;
+		font-weight: 700;
+		margin: 0 0 0.5rem;
+	}
+	.ec-product-detail__sku {
+		font-size: 0.8125rem;
+		color: var(--ec-color-muted, #6b7280);
+		margin: 0 0 1rem;
+	}
+	.ec-product-detail__price {
+		font-size: 1.25rem;
+		margin-bottom: 1rem;
+	}
+	.ec-product-detail__short-desc {
+		color: var(--ec-color-text-secondary, #4b5563);
+		line-height: 1.6;
+		margin: 0 0 1.5rem;
+	}
+	.ec-product-detail__variants { margin-bottom: 1.5rem; }
+	.ec-product-detail__qty-table { margin-bottom: 1.5rem; }
+	.ec-product-detail__add { margin-bottom: 1rem; }
+	.ec-product-detail__out-of-stock {
+		color: var(--ec-color-sale, #dc2626);
+		font-weight: 600;
+		font-size: 1rem;
+	}
+	.ec-product-detail__description {
+		border-top: 1px solid var(--ec-color-border, #e5e7eb);
+		padding-top: 2rem;
+	}
+	.ec-product-detail__description h2 {
+		font-size: 1.25rem;
+		margin: 0 0 1rem;
+	}
+</style>

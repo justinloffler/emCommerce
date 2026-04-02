@@ -1,0 +1,109 @@
+---
+/**
+ * VariantSelector — Dropdowns for product variant attributes.
+ * Updates the selected variant and notifies listeners.
+ */
+interface VariantOption {
+	id: string;
+	attributes: Record<string, string>;
+	price: number | null;
+	enabled: boolean;
+	imageId: string | null;
+}
+
+interface Props {
+	productId: string;
+	/** Attribute names and their possible values */
+	attributes: Array<{ name: string; values: string[] }>;
+	variants: VariantOption[];
+	class?: string;
+}
+
+const {
+	productId,
+	attributes,
+	variants,
+	class: className = "",
+} = Astro.props;
+
+const variantsJson = JSON.stringify(variants);
+---
+
+<div
+	class:list={["ec-variant-selector", className]}
+	data-product-id={productId}
+	data-variants={variantsJson}
+>
+	{attributes.map((attr) => (
+		<div class="ec-variant-selector__group">
+			<label class="ec-variant-selector__label">{attr.name}</label>
+			<select
+				class="ec-variant-selector__select"
+				data-attribute={attr.name}
+				aria-label={`Select ${attr.name}`}
+			>
+				{attr.values.map((val, i) => (
+					<option value={val} selected={i === 0}>{val}</option>
+				))}
+			</select>
+		</div>
+	))}
+</div>
+
+<style>
+	.ec-variant-selector {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+	.ec-variant-selector__group {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+	.ec-variant-selector__label {
+		font-size: 0.875rem;
+		font-weight: 500;
+	}
+	.ec-variant-selector__select {
+		padding: 0.5rem 0.75rem;
+		border: 1px solid var(--ec-color-border, #e5e7eb);
+		border-radius: 0.375rem;
+		font-size: 0.9375rem;
+		background: white;
+		cursor: pointer;
+	}
+</style>
+
+<script>
+	document.querySelectorAll<HTMLElement>(".ec-variant-selector").forEach((el) => {
+		const variants: Array<{ id: string; attributes: Record<string, string>; enabled: boolean }> =
+			JSON.parse(el.dataset.variants || "[]");
+		const selects = el.querySelectorAll<HTMLSelectElement>(".ec-variant-selector__select");
+
+		function findMatchingVariant(): string | null {
+			const selected: Record<string, string> = {};
+			selects.forEach((s) => { selected[s.dataset.attribute!] = s.value; });
+
+			const match = variants.find((v) =>
+				v.enabled && Object.entries(selected).every(([k, val]) => v.attributes[k] === val),
+			);
+			return match?.id ?? null;
+		}
+
+		selects.forEach((select) => {
+			select.addEventListener("change", () => {
+				const variantId = findMatchingVariant();
+				const addBtn = document.querySelector<HTMLElement>(
+					`.ec-add-to-cart[data-product-id="${el.dataset.productId}"]`,
+				);
+				if (addBtn) addBtn.dataset.variantId = variantId ?? "";
+
+				el.dispatchEvent(new CustomEvent("ec:variant-change", {
+					bubbles: true,
+					detail: { variantId },
+				}));
+			});
+		});
+	});
+</script>

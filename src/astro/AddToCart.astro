@@ -1,0 +1,143 @@
+---
+/**
+ * AddToCart — Interactive button with quantity input.
+ * Uses client-side JS from client/cart.ts.
+ */
+interface Props {
+	productId: string;
+	variantId?: string | null;
+	/** Show quantity input (default: true) */
+	showQuantity?: boolean;
+	buttonText?: string;
+	class?: string;
+}
+
+const {
+	productId,
+	variantId = null,
+	showQuantity = true,
+	buttonText = "Add to Cart",
+	class: className = "",
+} = Astro.props;
+---
+
+<div
+	class:list={["ec-add-to-cart", className]}
+	data-product-id={productId}
+	data-variant-id={variantId}
+>
+	{showQuantity && (
+		<div class="ec-add-to-cart__qty">
+			<button type="button" class="ec-add-to-cart__qty-btn" data-action="decrement">-</button>
+			<input
+				type="number"
+				class="ec-add-to-cart__qty-input"
+				value="1"
+				min="1"
+				max="999"
+				aria-label="Quantity"
+			/>
+			<button type="button" class="ec-add-to-cart__qty-btn" data-action="increment">+</button>
+		</div>
+	)}
+	<button type="button" class="ec-add-to-cart__btn" data-action="add">
+		{buttonText}
+	</button>
+</div>
+
+<style>
+	.ec-add-to-cart {
+		display: flex;
+		gap: 0.5rem;
+		align-items: stretch;
+	}
+	.ec-add-to-cart__qty {
+		display: flex;
+		border: 1px solid var(--ec-color-border, #e5e7eb);
+		border-radius: 0.375rem;
+		overflow: hidden;
+	}
+	.ec-add-to-cart__qty-btn {
+		width: 2.25rem;
+		border: none;
+		background: var(--ec-color-bg-muted, #f9fafb);
+		font-size: 1rem;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.ec-add-to-cart__qty-btn:hover {
+		background: var(--ec-color-border, #e5e7eb);
+	}
+	.ec-add-to-cart__qty-input {
+		width: 3rem;
+		text-align: center;
+		border: none;
+		border-left: 1px solid var(--ec-color-border, #e5e7eb);
+		border-right: 1px solid var(--ec-color-border, #e5e7eb);
+		font-size: 0.875rem;
+		-moz-appearance: textfield;
+	}
+	.ec-add-to-cart__qty-input::-webkit-inner-spin-button,
+	.ec-add-to-cart__qty-input::-webkit-outer-spin-button {
+		-webkit-appearance: none;
+		margin: 0;
+	}
+	.ec-add-to-cart__btn {
+		flex: 1;
+		padding: 0.625rem 1.25rem;
+		background: var(--ec-color-primary, #2563eb);
+		color: white;
+		border: none;
+		border-radius: 0.375rem;
+		font-size: 0.9375rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background 0.15s ease;
+		white-space: nowrap;
+	}
+	.ec-add-to-cart__btn:hover {
+		background: var(--ec-color-primary-hover, #1d4ed8);
+	}
+	.ec-add-to-cart__btn:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+</style>
+
+<script>
+	document.querySelectorAll<HTMLElement>(".ec-add-to-cart").forEach((el) => {
+		const productId = el.dataset.productId!;
+		const variantId = el.dataset.variantId || null;
+		const input = el.querySelector<HTMLInputElement>(".ec-add-to-cart__qty-input");
+		const addBtn = el.querySelector<HTMLButtonElement>('[data-action="add"]')!;
+		const decBtn = el.querySelector<HTMLButtonElement>('[data-action="decrement"]');
+		const incBtn = el.querySelector<HTMLButtonElement>('[data-action="increment"]');
+
+		function getQty(): number {
+			return input ? Math.max(1, parseInt(input.value) || 1) : 1;
+		}
+
+		decBtn?.addEventListener("click", () => {
+			if (input) input.value = String(Math.max(1, getQty() - 1));
+		});
+		incBtn?.addEventListener("click", () => {
+			if (input) input.value = String(Math.min(999, getQty() + 1));
+		});
+
+		addBtn.addEventListener("click", async () => {
+			addBtn.disabled = true;
+			addBtn.textContent = "Adding...";
+			try {
+				const { addToCart } = await import("@emdash-cms/plugin-emcommerce/client");
+				await addToCart(productId, variantId, getQty());
+				addBtn.textContent = "Added!";
+				setTimeout(() => { addBtn.textContent = "Add to Cart"; addBtn.disabled = false; }, 1500);
+			} catch {
+				addBtn.textContent = "Error";
+				setTimeout(() => { addBtn.textContent = "Add to Cart"; addBtn.disabled = false; }, 2000);
+			}
+		});
+	});
+</script>

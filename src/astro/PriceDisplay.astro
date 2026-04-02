@@ -1,0 +1,81 @@
+---
+/**
+ * PriceDisplay — Shows price with optional strikethrough and discount badge.
+ *
+ * @example
+ * ```astro
+ * <PriceDisplay unitPrice={1999} originalPrice={2499} currencySymbol="$" />
+ * ```
+ */
+interface Props {
+	/** Final price in cents */
+	unitPrice: number;
+	/** Original price before discount (cents). Shown as strikethrough if different from unitPrice */
+	originalPrice?: number;
+	currencySymbol?: string;
+	decimalPlaces?: number;
+	class?: string;
+}
+
+const {
+	unitPrice,
+	originalPrice,
+	currencySymbol = "$",
+	decimalPlaces = 2,
+	class: className = "",
+} = Astro.props;
+
+const hasDiscount = originalPrice !== undefined && originalPrice > unitPrice;
+
+function formatPrice(cents: number): string {
+	if (decimalPlaces === 0) return `${currencySymbol}${cents}`;
+	const divisor = Math.pow(10, decimalPlaces);
+	const whole = Math.floor(cents / divisor);
+	const frac = String(cents % divisor).padStart(decimalPlaces, "0");
+	return `${currencySymbol}${whole}.${frac}`;
+}
+
+const discountPercent = hasDiscount
+	? Math.round(((originalPrice! - unitPrice) / originalPrice!) * 100)
+	: 0;
+---
+
+<span class:list={["ec-price", className]}>
+	{hasDiscount && (
+		<span class="ec-price__original">
+			<s>{formatPrice(originalPrice!)}</s>
+		</span>
+	)}
+	<span class:list={["ec-price__current", { "ec-price__current--sale": hasDiscount }]}>
+		{formatPrice(unitPrice)}
+	</span>
+	{hasDiscount && discountPercent > 0 && (
+		<span class="ec-price__badge">-{discountPercent}%</span>
+	)}
+</span>
+
+<style>
+	.ec-price {
+		display: inline-flex;
+		align-items: baseline;
+		gap: 0.5em;
+		font-variant-numeric: tabular-nums;
+	}
+	.ec-price__original {
+		color: var(--ec-color-muted, #6b7280);
+		font-size: 0.875em;
+	}
+	.ec-price__current--sale {
+		color: var(--ec-color-sale, #dc2626);
+		font-weight: 600;
+	}
+	.ec-price__badge {
+		display: inline-block;
+		background: var(--ec-color-sale, #dc2626);
+		color: white;
+		font-size: 0.75em;
+		font-weight: 600;
+		padding: 0.125em 0.375em;
+		border-radius: 0.25em;
+	}
+</style>

@@ -1,0 +1,82 @@
+---
+/**
+ * ProductListPage — Ready-to-use product listing page.
+ *
+ * @example
+ * ```astro
+ * ---
+ * import { ProductListPage } from "@emdash-cms/plugin-emcommerce/astro";
+ * ---
+ * <ProductListPage />
+ * ```
+ */
+import ProductGrid from "../ProductGrid.astro";
+import CartDrawer from "../CartDrawer.astro";
+
+interface ProductData {
+	id: string;
+	name: string;
+	slug: string;
+	imageUrl?: string;
+	unitPrice: number;
+	originalPrice?: number;
+}
+
+interface Props {
+	/** Products to display (fetched externally via storefront API) */
+	products: ProductData[];
+	/** Page title */
+	title?: string;
+	currencySymbol?: string;
+	basePath?: string;
+	columns?: 2 | 3 | 4;
+	/** Show cart drawer */
+	showCartDrawer?: boolean;
+}
+
+const {
+	products,
+	title = "Products",
+	currencySymbol = "$",
+	basePath = "/products/",
+	columns = 3,
+	showCartDrawer = true,
+} = Astro.props;
+---
+
+<div class="ec-page ec-page--product-list">
+	<header class="ec-page__header">
+		<h1 class="ec-page__title">{title}</h1>
+		<slot name="filters" />
+	</header>
+
+	<ProductGrid
+		products={products}
+		currencySymbol={currencySymbol}
+		basePath={basePath}
+		columns={columns}
+	/>
+
+	<slot name="pagination" />
+</div>
+
+{showCartDrawer && <CartDrawer currencySymbol={currencySymbol} />}
+
+<style>
+	.ec-page--product-list {
+		max-width: 72rem;
+		margin: 0 auto;
+		padding: 2rem 1rem;
+	}
+	.ec-page__header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 2rem;
+	}
+	.ec-page__title {
+		font-size: 1.5rem;
+		font-weight: 700;
+		margin: 0;
+	}
+</style>

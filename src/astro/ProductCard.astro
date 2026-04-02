@@ -1,0 +1,118 @@
+---
+/**
+ * ProductCard — Compact product display for grid/list views.
+ */
+import PriceDisplay from "./PriceDisplay.astro";
+
+interface Props {
+	id: string;
+	name: string;
+	slug: string;
+	/** First image URL */
+	imageUrl?: string;
+	unitPrice: number;
+	originalPrice?: number;
+	currencySymbol?: string;
+	/** Base path for product detail links (default: /products/) */
+	basePath?: string;
+	class?: string;
+}
+
+const {
+	id,
+	name,
+	slug,
+	imageUrl,
+	unitPrice,
+	originalPrice,
+	currencySymbol = "$",
+	basePath = "/products/",
+	class: className = "",
+} = Astro.props;
+
+const href = `${basePath}${slug}`;
+---
+
+<article class:list={["ec-product-card", className]} data-product-id={id}>
+	<a href={href} class="ec-product-card__link">
+		{imageUrl ? (
+			<img src={imageUrl} alt={name} class="ec-product-card__image" loading="lazy" />
+		) : (
+			<div class="ec-product-card__image ec-product-card__image--placeholder" />
+		)}
+		<div class="ec-product-card__info">
+			<h3 class="ec-product-card__name">{name}</h3>
+			<PriceDisplay
+				unitPrice={unitPrice}
+				originalPrice={originalPrice}
+				currencySymbol={currencySymbol}
+			/>
+		</div>
+	</a>
+	<button
+		class="ec-product-card__add"
+		data-add-to-cart={id}
+		type="button"
+	>
+		Add to Cart
+	</button>
+</article>
+
+<style>
+	.ec-product-card {
+		display: flex;
+		flex-direction: column;
+		border: 1px solid var(--ec-color-border, #e5e7eb);
+		border-radius: 0.5rem;
+		overflow: hidden;
+		transition: box-shadow 0.15s ease;
+	}
+	.ec-product-card:hover {
+		box-shadow: 0 4px 12px rgb(0 0 0 / 0.08);
+	}
+	.ec-product-card__link {
+		text-decoration: none;
+		color: inherit;
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+	}
+	.ec-product-card__image {
+		aspect-ratio: 1;
+		width: 100%;
+		object-fit: cover;
+		background: var(--ec-color-bg-muted, #f9fafb);
+	}
+	.ec-product-card__image--placeholder {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.ec-product-card__info {
+		padding: 0.75rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+	.ec-product-card__name {
+		font-size: 0.9375rem;
+		font-weight: 500;
+		margin: 0;
+		line-height: 1.3;
+	}
+	.ec-product-card__add {
+		margin: 0 0.75rem 0.75rem;
+		padding: 0.5rem 1rem;
+		background: var(--ec-color-primary, #2563eb);
+		color: white;
+		border: none;
+		border-radius: 0.375rem;
+		font-size: 0.875rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background 0.15s ease;
+	}
+	.ec-product-card__add:hover {
+		background: var(--ec-color-primary-hover, #1d4ed8);
+	}
+</style>

@@ -1,0 +1,209 @@
+---
+/**
+ * CartPage — Full-page cart view.
+ * Client-rendered via JS — fetches cart on mount, updates reactively.
+ */
+interface Props {
+	currencySymbol?: string;
+	checkoutPath?: string;
+	continuePath?: string;
+}
+
+const {
+	currencySymbol = "$",
+	checkoutPath = "/checkout",
+	continuePath = "/products",
+} = Astro.props;
+---
+
+<div
+	class="ec-page ec-page--cart"
+	data-cart-page
+	data-currency={currencySymbol}
+	data-checkout={checkoutPath}
+	data-continue={continuePath}
+>
+	<h1 class="ec-cart-page__title">Shopping Cart</h1>
+
+	<div class="ec-cart-page__loading" data-cart-loading>
+		<p>Loading cart...</p>
+	</div>
+
+	<div class="ec-cart-page__content" data-cart-content style="display:none">
+		<div class="ec-cart-page__empty" data-cart-empty style="display:none">
+			<p>Your cart is empty.</p>
+			<a data-cart-continue class="ec-cart-page__continue">Continue Shopping</a>
+		</div>
+
+		<div class="ec-cart-page__filled" data-cart-filled style="display:none">
+			<table class="ec-cart-page__table">
+				<thead>
+					<tr>
+						<th>Product</th>
+						<th>Price</th>
+						<th>Quantity</th>
+						<th>Total</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody data-cart-tbody></tbody>
+			</table>
+
+			<div class="ec-cart-page__summary">
+				<div class="ec-cart-page__coupon">
+					<input type="text" placeholder="Coupon code" data-coupon-input class="ec-cart-page__coupon-input" />
+					<button type="button" data-coupon-apply class="ec-cart-page__coupon-btn">Apply</button>
+				</div>
+
+				<div class="ec-cart-page__totals">
+					<div class="ec-cart-page__row">
+						<span>Subtotal</span>
+						<span data-cart-subtotal></span>
+					</div>
+					<div class="ec-cart-page__row" data-cart-discount-row style="display:none">
+						<span>Discount</span>
+						<span data-cart-discount></span>
+					</div>
+					<div class="ec-cart-page__row ec-cart-page__row--total">
+						<span>Total</span>
+						<span data-cart-total></span>
+					</div>
+				</div>
+
+				<a data-cart-checkout-btn class="ec-cart-page__checkout">Proceed to Checkout</a>
+				<a data-cart-continue class="ec-cart-page__continue-link">Continue Shopping</a>
+			</div>
+		</div>
+	</div>
+</div>
+
+<style>
+	.ec-page--cart { max-width: 64rem; margin: 0 auto; padding: 2rem 1rem; }
+	.ec-cart-page__title { font-size: 1.5rem; font-weight: 700; margin: 0 0 2rem; }
+	.ec-cart-page__table { width: 100%; border-collapse: collapse; margin-bottom: 2rem; }
+	.ec-cart-page__table th {
+		text-align: left; padding: 0.75rem; font-size: 0.75rem; text-transform: uppercase;
+		letter-spacing: 0.05em; color: var(--ec-color-muted, #6b7280);
+		border-bottom: 2px solid var(--ec-color-border, #e5e7eb);
+	}
+	.ec-cart-page__table td {
+		padding: 0.75rem; border-bottom: 1px solid var(--ec-color-border, #e5e7eb);
+		vertical-align: middle;
+	}
+	.ec-cart-page__summary {
+		display: flex; flex-direction: column; gap: 1.5rem;
+		max-width: 24rem; margin-left: auto;
+	}
+	.ec-cart-page__coupon { display: flex; gap: 0.5rem; }
+	.ec-cart-page__coupon-input {
+		flex: 1; padding: 0.5rem 0.75rem; border: 1px solid var(--ec-color-border, #e5e7eb);
+		border-radius: 0.375rem;
+	}
+	.ec-cart-page__coupon-btn {
+		padding: 0.5rem 1rem; border: 1px solid var(--ec-color-border, #e5e7eb);
+		border-radius: 0.375rem; background: white; cursor: pointer; font-weight: 500;
+	}
+	.ec-cart-page__totals { display: flex; flex-direction: column; gap: 0.5rem; }
+	.ec-cart-page__row { display: flex; justify-content: space-between; }
+	.ec-cart-page__row--total { font-size: 1.125rem; font-weight: 700; padding-top: 0.5rem; border-top: 2px solid var(--ec-color-border, #e5e7eb); }
+	.ec-cart-page__checkout {
+		display: block; text-align: center; padding: 0.75rem;
+		background: var(--ec-color-primary, #2563eb); color: white;
+		border-radius: 0.375rem; text-decoration: none; font-weight: 500;
+	}
+	.ec-cart-page__checkout:hover { background: var(--ec-color-primary-hover, #1d4ed8); }
+	.ec-cart-page__continue, .ec-cart-page__continue-link {
+		text-align: center; color: var(--ec-color-primary, #2563eb); text-decoration: none; font-weight: 500;
+	}
+	.ec-cart-page__empty { text-align: center; padding: 3rem 0; }
+</style>
+
+<script>
+	const page = document.querySelector<HTMLElement>("[data-cart-page]");
+	if (page) {
+		const currency = page.dataset.currency || "$";
+		const checkoutPath = page.dataset.checkout || "/checkout";
+		const continuePath = page.dataset.continue || "/products";
+		const fmt = (c: number) => `${currency}${(c / 100).toFixed(2)}`;
+
+		(async () => {
+			try {
+				const { getCart, updateCartItem, removeFromCart, applyCoupon, onCartChange } =
+					await import("@emdash-cms/plugin-emcommerce/client");
+
+				const loadingEl = page.querySelector("[data-cart-loading]") as HTMLElement;
+				const contentEl = page.querySelector("[data-cart-content]") as HTMLElement;
+				const emptyEl = page.querySelector("[data-cart-empty]") as HTMLElement;
+				const filledEl = page.querySelector("[data-cart-filled]") as HTMLElement;
+				const tbody = page.querySelector("[data-cart-tbody]")!;
+				const subtotalEl = page.querySelector("[data-cart-subtotal]")!;
+				const discountRow = page.querySelector<HTMLElement>("[data-cart-discount-row]")!;
+				const discountEl = page.querySelector("[data-cart-discount]")!;
+				const totalEl = page.querySelector("[data-cart-total]")!;
+
+				// Wire up links
+				page.querySelectorAll<HTMLAnchorElement>("[data-cart-continue]").forEach((a) => a.href = continuePath);
+				page.querySelectorAll<HTMLAnchorElement>("[data-cart-checkout-btn]").forEach((a) => a.href = checkoutPath);
+
+				// Coupon
+				const couponInput = page.querySelector<HTMLInputElement>("[data-coupon-input]")!;
+				const couponBtn = page.querySelector("[data-coupon-apply]")!;
+				couponBtn.addEventListener("click", async () => {
+					const code = couponInput.value.trim();
+					if (code) { try { await applyCoupon(code); couponInput.value = ""; } catch (e: any) { alert(e.message); } }
+				});
+
+				onCartChange((cart) => {
+					loadingEl.style.display = "none";
+					contentEl.style.display = "";
+
+					if (cart.itemCount === 0) {
+						emptyEl.style.display = "";
+						filledEl.style.display = "none";
+					} else {
+						emptyEl.style.display = "none";
+						filledEl.style.display = "";
+
+						tbody.innerHTML = cart.items.map((item) => `
+							<tr>
+								<td><strong>${item.name}</strong></td>
+								<td>${fmt(item.unitPrice)}</td>
+								<td>
+									<input type="number" value="${item.quantity}" min="0" max="999"
+										style="width:4rem;padding:0.25rem;text-align:center;border:1px solid #e5e7eb;border-radius:0.25rem"
+										data-qty-product="${item.productId}" data-qty-variant="${item.variantId || ""}" />
+								</td>
+								<td>${fmt(item.lineTotal)}</td>
+								<td><button type="button" data-remove-product="${item.productId}" data-remove-variant="${item.variantId || ""}" style="border:none;background:none;cursor:pointer;color:#dc2626">&times;</button></td>
+							</tr>
+						`).join("");
+
+						// Quantity change handlers
+						tbody.querySelectorAll<HTMLInputElement>("input[data-qty-product]").forEach((input) => {
+							input.addEventListener("change", () => {
+								updateCartItem(input.dataset.qtyProduct!, input.dataset.qtyVariant || null, parseInt(input.value) || 0);
+							});
+						});
+						// Remove handlers
+						tbody.querySelectorAll<HTMLButtonElement>("button[data-remove-product]").forEach((btn) => {
+							btn.addEventListener("click", () => {
+								removeFromCart(btn.dataset.removeProduct!, btn.dataset.removeVariant || null);
+							});
+						});
+					}
+
+					subtotalEl.textContent = fmt(cart.subtotal);
+					if (cart.discountTotal > 0) {
+						discountRow.style.display = "";
+						discountEl.textContent = `-${fmt(cart.discountTotal)}`;
+					} else {
+						discountRow.style.display = "none";
+					}
+					totalEl.textContent = fmt(cart.total);
+				});
+
+				await getCart();
+			} catch { /* Cart client not available */ }
+		})();
+	}
+</script>

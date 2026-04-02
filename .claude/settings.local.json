@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm ls:*)",
+      "Bash(npm root:*)",
+      "Read(//c/nvm4w/nodejs//**)",
+      "Bash(where pnpm:*)",
+      "Bash(corepack --version)",
+      "Bash(npm install:*)",
+      "Bash(nvm list:*)",
+      "Bash(nvm use:*)",
+      "Bash(export PATH=\"/c/nvm4w/v22.15.0:$PATH\")",
+      "Bash(npm -v)",
+      "Bash(npx emdash:*)",
+      "Bash(npx astro:*)",
+      "Bash(pkill -f \"astro dev\")",
+      "Bash(curl -s -X POST http://localhost:4321/_emdash/api/plugins/emcommerce/settings/get -H \"Content-Type: application/json\" -d '{}')",
+      "Bash(curl -s -X POST http://localhost:4321/_emdash/api/plugins/emcommerce/storefront/products -H \"Content-Type: application/json\" -d '{\"\"limit\"\":10}')",
+      "Bash(curl -s http://localhost:4321/_emdash/admin/)",
+      "Bash(curl -sL http://localhost:4321/_emdash/admin/ -w \"\\\\n%{http_code}\")",
+      "Bash(curl -sL -o /dev/null -w \"%{http_code}\" http://localhost:4322/_emdash/admin/setup)",
+      "WebSearch",
+      "WebFetch(domain:woocommerce.github.io)",
+      "WebFetch(domain:developer.woocommerce.com)",
+      "Bash(curl -s -X POST http://localhost:4323/_emdash/api/plugins/emcommerce/storefront/cart/get -H \"Content-Type: application/json\" -d '{\"\"sessionId\"\":\"\"test-123\"\"}')",
+      "Bash(curl -s -X POST http://localhost:4323/_emdash/api/plugins/emcommerce/storefront/products -H \"Content-Type: application/json\" -d '{\"\"limit\"\":5}')",
+      "Bash(curl -s -X POST http://localhost:4323/_emdash/api/plugins/emcommerce/storefront/cart/add -H \"Content-Type: application/json\" -d '{\"\"sessionId\"\":\"\"test-123\"\",\"\"productId\"\":\"\"01KN7WHHQZX69NXQSD45A36D1J\"\",\"\"quantity\"\":2}')",
+      "Bash(curl -s -X POST http://localhost:4323/_emdash/api/plugins/emcommerce/storefront/cart/add -H \"Content-Type: application/json\" -d '{\"\"sessionId\"\":\"\"test-456\"\",\"\"productId\"\":\"\"01KN7WHHQZX69NXQSD45A36D1J\"\",\"\"quantity\"\":2}')",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:4321/)",
+      "Bash(curl -s -o /dev/null -w \" %{http_code}\" http://localhost:4323/)",
+      "Bash(curl -s -o /dev/null -w \" %{http_code}\" http://localhost:4324/)",
+      "Bash(curl -s -X POST http://localhost:4321/_emdash/api/plugins/emcommerce/storefront/products -H \"Content-Type: application/json\" -d '{\"\"\"\"limit\"\"\"\":1}')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); p=d[''''data''''][''''items''''][0]; print\\(''''has customFields:'''', ''''customFields'''' in p\\)\")",
+      "Bash(pnpm exec:*)",
+      "Bash(npm run:*)",
+      "Bash(cmd /c \"npx tsc --noEmit 2>&1\")",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(taskkill //F //IM node.exe)",
+      "Read(//c/Users/Corey/AppData/Local/Temp/claude/**)"
+    ]
+  }
+}
