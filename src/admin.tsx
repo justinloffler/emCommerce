@@ -1391,8 +1391,24 @@ function GeneralTab({ settings, upd, save, saving }: { settings: any; upd: (f: s
 					<Field label="Tax-inclusive Pricing">
 						<select style={formSelect} value={String(settings?.taxInclusive)} onChange={(e) => upd("taxInclusive", e.target.value === "true")}>
 							<option value="false">No (prices exclude tax)</option>
-							<option value="true">Yes (prices include tax)</option>
+							<option value="true">Yes (prices include tax, e.g. GST)</option>
 						</select>
+					</Field>
+				</div>
+				<div style={formRow}>
+					<Field label="Tax on Shipping">
+						<select style={formSelect} value={String(settings?.taxShipping ?? false)} onChange={(e) => upd("taxShipping", e.target.value === "true")}>
+							<option value="false">No</option>
+							<option value="true">Yes (uses the default tax class)</option>
+						</select>
+					</Field>
+					<Field label="Cancel Unpaid Orders After (hours)">
+						<input style={formInput} type="number" min={1} max={720} value={settings?.pendingOrderTimeoutHours ?? 24} onChange={(e) => upd("pendingOrderTimeoutHours", Number(e.target.value) || 24)} />
+					</Field>
+				</div>
+				<div style={formRow}>
+					<Field label="Store Email (notifications)">
+						<input style={formInput} type="email" value={settings?.storeEmail || ""} onChange={(e) => upd("storeEmail", e.target.value)} placeholder="orders@example.com" />
 					</Field>
 				</div>
 				<div style={formActions}><button style={btn} onClick={save} disabled={saving}>{saving ? "Saving..." : "Save"}</button></div>
@@ -1403,6 +1419,11 @@ function GeneralTab({ settings, upd, save, saving }: { settings: any; upd: (f: s
 }
 
 // ─── Settings: Payments tab ─────────────────────────────────────
+
+function webhookUrl(path?: string): string {
+	if (!path) return "";
+	return typeof window === "undefined" ? path : `${window.location.origin}${path}`;
+}
 
 function PaymentsTab({ settings, upd, save, saving }: { settings: any; upd: (f: string, v: any) => void; save: () => void; saving: boolean }) {
 	const hint: React.CSSProperties = { fontSize: "0.75rem", color: "#9ca3af", marginTop: "0.25rem" };
@@ -1436,6 +1457,10 @@ function PaymentsTab({ settings, upd, save, saving }: { settings: any; upd: (f: 
 						<input style={formInput} type="password" value={settings?.stripeWebhookSecret || ""} onChange={(e) => upd("stripeWebhookSecret", e.target.value)} placeholder={settings?.stripeWebhookSecret?.startsWith("••") ? "leave blank to keep existing" : "whsec_..."} />
 						<p style={hint}>From Stripe → Developers → Webhooks</p>
 					</Field>
+					<Field label="Webhook Endpoint">
+						<input style={formInput} readOnly value={webhookUrl(settings?.webhookUrls?.stripe)} onFocus={(e) => e.currentTarget.select()} />
+						<p style={hint}>Events: payment_intent.succeeded, payment_intent.payment_failed, charge.refunded</p>
+					</Field>
 				</div>
 				<div style={formActions}><button style={btn} onClick={save} disabled={saving}>{saving ? "Saving..." : "Save Stripe"}</button></div>
 			</div>
@@ -1465,6 +1490,16 @@ function PaymentsTab({ settings, upd, save, saving }: { settings: any; upd: (f: 
 							<option value="true">Sandbox (test)</option>
 							<option value="false">Live</option>
 						</select>
+					</Field>
+					<Field label="Webhook ID">
+						<input style={formInput} value={settings?.paypalWebhookId || ""} onChange={(e) => upd("paypalWebhookId", e.target.value)} placeholder="8PT597110X687430LKGECATA" />
+						<p style={hint}>Webhooks are ignored until this is set</p>
+					</Field>
+				</div>
+				<div style={formRow}>
+					<Field label="Webhook Endpoint">
+						<input style={formInput} readOnly value={webhookUrl(settings?.webhookUrls?.paypal)} onFocus={(e) => e.currentTarget.select()} />
+						<p style={hint}>Events: PAYMENT.CAPTURE.COMPLETED, PAYMENT.CAPTURE.DENIED, PAYMENT.CAPTURE.REFUNDED</p>
 					</Field>
 				</div>
 				<div style={formActions}><button style={btn} onClick={save} disabled={saving}>{saving ? "Saving..." : "Save PayPal"}</button></div>
@@ -1651,6 +1686,10 @@ function SettingsPage() {
 				storeCountry: settings.storeCountry,
 				defaultCurrency: settings.defaultCurrency,
 				taxInclusive: settings.taxInclusive,
+				taxShipping: settings.taxShipping,
+				storeEmail: settings.storeEmail,
+				pendingOrderTimeoutHours: settings.pendingOrderTimeoutHours,
+				paypalWebhookId: settings.paypalWebhookId,
 				stripePublishableKey: settings.stripePublishableKey,
 				stripeSecretKey: settings.stripeSecretKey,
 				stripeWebhookSecret: settings.stripeWebhookSecret,

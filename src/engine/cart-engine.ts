@@ -31,6 +31,10 @@ export interface CartSummary {
 	total: number;
 	itemCount: number;
 	currencyCode: string;
+	/** True when a valid free_shipping coupon is applied */
+	freeShipping: boolean;
+	/** Total shipping weight in grams (items without a weight count as 0) */
+	totalWeight: number;
 }
 
 export interface CartItemSummary {
@@ -44,6 +48,10 @@ export interface CartItemSummary {
 	lineTotal: number;
 	attributes: Record<string, string>;
 	imageId: string | null;
+	/** Tax class of the product ("" = store default) */
+	taxClassId: string;
+	/** Unit weight in grams (variant weight overrides product weight) */
+	weight: number;
 }
 
 export interface CartCalculationContext {
@@ -106,11 +114,13 @@ export async function calculateCart(
 			lineTotal,
 			attributes: variantData?.attributes ?? {},
 			imageId: variantData?.imageId ?? (product.images[0] ?? null),
+			taxClassId: product.taxClassId ?? "",
+			weight: variantData?.weight ?? product.weight ?? 0,
 		});
 	}
 
 	// Apply coupons
-	const { discountTotal, discountBreakdown } = await applyCoupons(
+	const { discountTotal, discountBreakdown, freeShipping } = await applyCoupons(
 		cart.couponCodes,
 		items,
 		subtotal,
@@ -130,6 +140,8 @@ export async function calculateCart(
 		total: Math.max(0, subtotal - discountTotal),
 		itemCount,
 		currencyCode: cart.currencyCode,
+		freeShipping,
+		totalWeight: items.reduce((sum, i) => sum + i.weight * i.quantity, 0),
 	};
 }
 
@@ -140,10 +152,11 @@ async function applyCoupons(
 	items: CartItemSummary[],
 	subtotal: number,
 	ctx: CartCalculationContext,
-): Promise<{ discountTotal: number; discountBreakdown: DiscountLine[] }> {
+): Promise<{ discountTotal: number; discountBreakdown: DiscountLine[]; freeShipping: boolean }> {
 	if (codes.length === 0) {
-		return { discountTotal: 0, discountBreakdown: [] };
+		return { discountTotal: 0, discountBreakdown: [], freeShipping: false };
 	}
+	let freeShipping = false;
 
 	const now = new Date().toISOString();
 	let discountTotal = 0;
@@ -193,7 +206,8 @@ async function applyCoupons(
 				break;
 			}
 			case "free_shipping": {
-				// Handled externally in shipping calculation
+				// Applied by the shipping engine (unlocks free_shipping methods)
+				freeShipping = true;
 				break;
 			}
 			case "bogo": {
@@ -217,7 +231,12 @@ async function applyCoupons(
 		}
 	}
 
-	return { discountTotal, discountBreakdown };
+	// Discounts can never exceed the subtotal
+	if (discountTotal > subtotal) {
+		discountTotal = subtotal;
+	}
+
+	return { discountTotal, discountBreakdown, freeShipping };
 }
 
 function matchesCouponRestrictions(item: CartItemSummary, coupon: Coupon): boolean {

@@ -7,6 +7,7 @@ import { PluginRouteError } from "emdash";
 import type { WhereClause } from "../types.js";
 import { ulid } from "ulidx";
 import { requireHttp } from "./context.js";
+import { sendOrderEmail } from "../emails.js";
 
 import type {
 	OrderListInput, OrderGetInput, OrderUpdateStatusInput,
@@ -71,14 +72,7 @@ export async function orderUpdateStatusHandler(ctx: RouteContext<OrderUpdateStat
 		}
 
 		if (effects.sendEmail) {
-			const emailEnabled = await ctx.kv.get<boolean>(`email:${effects.sendEmail}:enabled`);
-			if (emailEnabled && ctx.email) {
-				await ctx.email.send({
-					to: order.customerEmail,
-					subject: getEmailSubject(effects.sendEmail, order.orderNumber),
-					text: getEmailBody(effects.sendEmail, order.orderNumber),
-				});
-			}
+			await sendOrderEmail(ctx, effects.sendEmail, updated);
 		}
 
 		await orders(ctx).put(input.id, updated);
@@ -125,7 +119,7 @@ export async function orderRefundHandler(ctx: RouteContext<OrderRefundInput>) {
 	const gateway = getGateway(order.paymentMethod);
 	if (!gateway) throw PluginRouteError.badRequest("Payment gateway not found");
 
-	const refundResult = await gateway.refundPayment(order.paymentIntentId, input.amount);
+	const refundResult = await gateway.refundPayment(order.paymentIntentId, input.amount, order.currencyCode);
 
 	const now = new Date().toISOString();
 	order.refunds.push({
@@ -161,10 +155,13 @@ export async function orderPublicGetHandler(ctx: RouteContext<OrderPublicGetInpu
 	const order = await orders(ctx).get(ctx.input.orderId);
 	if (!order) throw PluginRouteError.notFound("Order not found");
 
-	// Return only fields safe for public display — no payment intent, no admin notes
+	// Return only fields safe for public display — no payment refs, addresses,
+	// email or admin notes. Order IDs are unguessable ULIDs.
 	return {
 		orderNumber: order.orderNumber,
 		status: order.status,
+		paymentStatus: order.paymentStatus,
+		paid: order.paymentStatus === "captured",
 		items: order.items.map((item) => ({
 			productId: item.productId,
 			name: item.name,
@@ -172,38 +169,18 @@ export async function orderPublicGetHandler(ctx: RouteContext<OrderPublicGetInpu
 			quantity: item.quantity,
 			unitPrice: item.unitPrice,
 			totalPrice: item.total,
+			attributes: item.attributes,
 		})),
 		subtotal: order.subtotal,
 		shippingTotal: order.shippingTotal,
 		taxTotal: order.taxTotal,
+		taxLines: order.taxBreakdown,
+		taxInclusive: order.taxInclusive ?? false,
 		discountTotal: order.discountTotal,
 		total: order.total,
 		currencyCode: order.currencyCode,
-		shippingMethodName: order.shippingMethod,
+		shippingMethodName: order.shippingMethodName ?? order.shippingMethod,
+		paymentMethod: order.paymentMethod,
 		createdAt: order.createdAt,
 	};
-}
-
-// ─── Email Helpers ──────────────────────────────────────────────
-
-function getEmailSubject(type: string, orderNumber: string): string {
-	switch (type) {
-		case "order_confirmation": return `Order ${orderNumber} confirmed`;
-		case "shipping_notification": return `Order ${orderNumber} has been shipped`;
-		case "refund_confirmation": return `Refund for order ${orderNumber}`;
-		default: return `Update for order ${orderNumber}`;
-	}
-}
-
-function getEmailBody(type: string, orderNumber: string): string {
-	switch (type) {
-		case "order_confirmation":
-			return `Thank you for your order! Your order ${orderNumber} has been confirmed and is being processed.`;
-		case "shipping_notification":
-			return `Great news! Your order ${orderNumber} has been shipped.`;
-		case "refund_confirmation":
-			return `A refund has been issued for your order ${orderNumber}. Please allow a few business days for the refund to appear.`;
-		default:
-			return `There has been an update to your order ${orderNumber}.`;
-	}
 }

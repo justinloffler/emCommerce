@@ -1,0 +1,487 @@
+---
+/**
+ * CheckoutPage — contact, address, shipping, payment and order summary.
+ *
+ * Client-rendered: totals come from the server-side quote (tax, shipping and
+ * discounts), the order is created server-side, and payment is completed with
+ * the Stripe Payment Element or PayPal buttons. The server verifies payment
+ * with the provider before the order is marked paid.
+ *
+ * @example
+ * ```astro
+ * ---
+ * import { CheckoutPage } from "@emdash-cms/plugin-emcommerce/astro";
+ * ---
+ * <Base title="Checkout"><CheckoutPage /></Base>
+ * ```
+ */
+interface Props {
+	/** Where to send the customer after payment (receives ?order=<id>) */
+	confirmationPath?: string;
+	cartPath?: string;
+	/** Country pre-selected in the address form (defaults to the store country) */
+	defaultCountry?: string;
+}
+
+const { confirmationPath = "/shop/order-confirmation", cartPath = "/shop/cart", defaultCountry = "" } = Astro.props;
+---
+
+<div
+	class="ec-page ec-checkout"
+	data-checkout
+	data-confirmation={confirmationPath}
+	data-cart={cartPath}
+	data-default-country={defaultCountry}
+>
+	<h1 class="ec-checkout__title">Checkout</h1>
+
+	<p class="ec-checkout__status" data-status>Loading your cart…</p>
+
+	<div class="ec-checkout__layout" data-layout hidden>
+		<form class="ec-checkout__form" data-form novalidate>
+			<fieldset class="ec-checkout__section">
+				<legend>Contact</legend>
+				<label class="ec-field">
+					<span>Email</span>
+					<input type="email" name="email" autocomplete="email" required />
+				</label>
+			</fieldset>
+
+			<fieldset class="ec-checkout__section">
+				<legend>Shipping address</legend>
+				<div class="ec-grid-2">
+					<label class="ec-field"><span>First name</span><input name="firstName" autocomplete="given-name" required /></label>
+					<label class="ec-field"><span>Last name</span><input name="lastName" autocomplete="family-name" required /></label>
+				</div>
+				<label class="ec-field"><span>Company <em>(optional)</em></span><input name="company" autocomplete="organization" /></label>
+				<label class="ec-field"><span>Address</span><input name="addressLine1" autocomplete="address-line1" required /></label>
+				<label class="ec-field"><span>Apartment, suite, etc. <em>(optional)</em></span><input name="addressLine2" autocomplete="address-line2" /></label>
+				<div class="ec-grid-3">
+					<label class="ec-field"><span>City / suburb</span><input name="city" autocomplete="address-level2" required /></label>
+					<label class="ec-field"><span>State</span><input name="stateCode" autocomplete="address-level1" /></label>
+					<label class="ec-field"><span>Postcode</span><input name="postalCode" autocomplete="postal-code" required /></label>
+				</div>
+				<div class="ec-grid-2">
+					<label class="ec-field"><span>Country</span><select name="countryCode" autocomplete="country" required data-country></select></label>
+					<label class="ec-field"><span>Phone <em>(optional)</em></span><input name="phone" type="tel" autocomplete="tel" /></label>
+				</div>
+			</fieldset>
+
+			<fieldset class="ec-checkout__section">
+				<legend>Shipping method</legend>
+				<div data-shipping-methods class="ec-options">
+					<p class="ec-muted">Enter your address to see shipping options.</p>
+				</div>
+			</fieldset>
+
+			<fieldset class="ec-checkout__section">
+				<legend>Order notes <em>(optional)</em></legend>
+				<label class="ec-field"><textarea name="customerNote" rows="2" maxlength="1000"></textarea></label>
+			</fieldset>
+
+			<fieldset class="ec-checkout__section" data-payment-section>
+				<legend>Payment</legend>
+				<div data-gateways class="ec-options"></div>
+				<p class="ec-error" data-error role="alert" hidden></p>
+				<button type="submit" class="ec-button" data-continue>Continue to payment</button>
+				<div data-payment-area hidden>
+					<div data-stripe-element class="ec-stripe"></div>
+					<div data-paypal-buttons></div>
+					<button type="button" class="ec-button" data-pay hidden>Pay now</button>
+					<button type="button" class="ec-link" data-edit hidden>Change details</button>
+				</div>
+			</fieldset>
+		</form>
+
+		<aside class="ec-checkout__summary" aria-label="Order summary">
+			<h2>Order summary</h2>
+			<ul class="ec-summary__items" data-items></ul>
+			<dl class="ec-summary__totals" data-totals></dl>
+			<a class="ec-link" data-cart-link>Edit cart</a>
+		</aside>
+	</div>
+</div>
+
+<style is:global>
+	.ec-checkout { max-width: 72rem; margin: 0 auto; padding: 2rem 1rem 4rem; }
+	.ec-checkout__title { font-size: 1.75rem; font-weight: 700; margin: 0 0 1.5rem; }
+	.ec-checkout__status { color: var(--ec-color-muted, #6b7280); }
+	.ec-checkout__layout { display: grid; grid-template-columns: minmax(0, 1fr) 22rem; gap: 2.5rem; align-items: start; }
+	@media (max-width: 860px) {
+		.ec-checkout__layout { grid-template-columns: 1fr; }
+		.ec-checkout__summary { order: -1; position: static !important; }
+	}
+	.ec-checkout__section { border: none; padding: 0; margin: 0 0 2rem; min-width: 0; }
+	.ec-checkout__section legend { font-size: 1.125rem; font-weight: 600; margin-bottom: 0.75rem; padding: 0; }
+	.ec-checkout__section em, .ec-field em { font-style: normal; font-weight: 400; color: var(--ec-color-muted, #6b7280); }
+	.ec-field { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.75rem; font-size: 0.875rem; font-weight: 500; }
+	.ec-field input, .ec-field select, .ec-field textarea {
+		font: inherit; font-weight: 400; padding: 0.6rem 0.75rem;
+		border: 1px solid var(--ec-color-border, #d1d5db); border-radius: 0.375rem;
+		background: var(--ec-color-bg, #fff); color: inherit; width: 100%; box-sizing: border-box;
+	}
+	.ec-field input:focus, .ec-field select:focus, .ec-field textarea:focus {
+		outline: 2px solid var(--ec-color-primary, #2563eb); outline-offset: -1px; border-color: transparent;
+	}
+	.ec-field [aria-invalid="true"] { border-color: var(--ec-color-sale, #dc2626); }
+	.ec-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 0.75rem; }
+	.ec-grid-3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 0 0.75rem; }
+	@media (max-width: 520px) { .ec-grid-2, .ec-grid-3 { grid-template-columns: 1fr; } }
+	.ec-options { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem; }
+	.ec-option {
+		display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; cursor: pointer;
+		border: 1px solid var(--ec-color-border, #d1d5db); border-radius: 0.375rem;
+	}
+	.ec-option:has(input:checked) { border-color: var(--ec-color-primary, #2563eb); box-shadow: inset 0 0 0 1px var(--ec-color-primary, #2563eb); }
+	.ec-option input { margin: 0; flex: none; }
+	.ec-option span:first-of-type { flex: 1; }
+	.ec-option span:last-of-type:not(:first-of-type) { font-variant-numeric: tabular-nums; }
+	.ec-option input:disabled + span { opacity: 0.6; }
+	.ec-muted { color: var(--ec-color-muted, #6b7280); font-size: 0.875rem; margin: 0; }
+	.ec-error { color: var(--ec-color-sale, #dc2626); font-size: 0.875rem; margin: 0 0 1rem; }
+	.ec-button {
+		display: block; width: 100%; padding: 0.85rem 1rem; font: inherit; font-weight: 600;
+		background: var(--ec-color-primary, #2563eb); color: var(--ec-color-on-primary, #fff); border: none; border-radius: 0.375rem; cursor: pointer;
+	}
+	.ec-button:hover { background: var(--ec-color-primary-hover, #1d4ed8); }
+	.ec-button:disabled { opacity: 0.6; cursor: progress; }
+	.ec-link { background: none; border: none; padding: 0; margin-top: 1rem; font: inherit; font-size: 0.875rem; color: var(--ec-color-primary, #2563eb); cursor: pointer; text-decoration: underline; display: inline-block; }
+	.ec-stripe { margin-bottom: 1rem; }
+	.ec-checkout__summary {
+		position: sticky; top: 1.5rem; padding: 1.5rem; border-radius: 0.5rem;
+		background: var(--ec-color-bg-muted, #f9fafb); border: 1px solid var(--ec-color-border, #e5e7eb);
+	}
+	.ec-checkout__summary h2 { font-size: 1.125rem; margin: 0 0 1rem; }
+	.ec-summary__items { list-style: none; margin: 0 0 1rem; padding: 0; }
+	.ec-summary__items li { display: flex; justify-content: space-between; gap: 1rem; padding: 0.5rem 0; font-size: 0.9rem; border-bottom: 1px solid var(--ec-color-border, #e5e7eb); }
+	.ec-summary__items small { display: block; color: var(--ec-color-muted, #6b7280); }
+	.ec-summary__totals { display: grid; grid-template-columns: 1fr auto; gap: 0.4rem 1rem; margin: 0; font-size: 0.9rem; }
+	.ec-summary__totals dt { color: var(--ec-color-muted, #6b7280); }
+	.ec-summary__totals dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+	.ec-summary__totals .ec-total { font-size: 1.125rem; font-weight: 700; color: inherit; padding-top: 0.5rem; border-top: 1px solid var(--ec-color-border, #e5e7eb); }
+	.ec-summary__totals .ec-note { grid-column: 1 / -1; font-size: 0.8rem; color: var(--ec-color-muted, #6b7280); text-align: right; }
+</style>
+
+<script>
+	import type {
+		CheckoutAddress,
+		CheckoutQuote,
+		CreatedOrder,
+		StorefrontConfig,
+	} from "@emdash-cms/plugin-emcommerce/client";
+
+	const COUNTRIES =
+		"AD AE AF AG AI AL AM AO AR AT AU AW AZ BA BB BD BE BF BG BH BI BJ BM BN BO BR BS BT BW BY BZ CA CD CF CG CH CI CK CL CM CN CO CR CU CV CW CY CZ DE DJ DK DM DO DZ EC EE EG ER ES ET FI FJ FK FM FO FR GA GB GD GE GH GI GL GM GN GQ GR GT GU GW GY HK HN HR HT HU ID IE IL IN IQ IR IS IT JM JO JP KE KG KH KI KM KN KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MG MH MK ML MM MN MO MR MT MU MV MW MX MY MZ NA NC NE NG NI NL NO NP NR NZ OM PA PE PF PG PH PK PL PR PS PT PW PY QA RO RS RU RW SA SB SC SD SE SG SI SK SL SM SN SO SR SS ST SV SY SZ TC TD TG TH TJ TL TM TN TO TR TT TV TW TZ UA UG US UY UZ VA VC VE VG VN VU WS YE ZA ZM ZW".split(" ");
+
+	const root = document.querySelector<HTMLElement>("[data-checkout]");
+	if (root) void init(root);
+
+	async function init(root: HTMLElement) {
+		const client = await import("@emdash-cms/plugin-emcommerce/client");
+		const { escapeHtml: esc } = client;
+		const $ = <T extends Element = HTMLElement>(sel: string) => root.querySelector<T>(sel)!;
+
+		const statusEl = $("[data-status]");
+		const layout = $("[data-layout]");
+		const form = $<HTMLFormElement>("[data-form]");
+		const errorEl = $("[data-error]");
+		const continueBtn = $<HTMLButtonElement>("[data-continue]");
+		const payBtn = $<HTMLButtonElement>("[data-pay]");
+		const editBtn = $<HTMLButtonElement>("[data-edit]");
+		const paymentArea = $("[data-payment-area]");
+		const gatewaysEl = $("[data-gateways]");
+		const shippingEl = $("[data-shipping-methods]");
+		const countrySelect = $<HTMLSelectElement>("[data-country]");
+		$<HTMLAnchorElement>("[data-cart-link]").href = root.dataset.cart || "/shop/cart";
+
+		let config: StorefrontConfig;
+		let quote: CheckoutQuote | null = null;
+		let order: CreatedOrder | null = null;
+		let quoteSeq = 0;
+		let quoteErrorShown = false;
+		const money = (n: number) => client.formatMoney(n, config.currency);
+
+		function showError(message: string | null) {
+			errorEl.textContent = message ?? "";
+			errorEl.hidden = !message;
+		}
+
+		try {
+			config = await client.getStorefrontConfig();
+			quote = await client.getCheckoutQuote(null);
+		} catch (err) {
+			statusEl.innerHTML = `Your cart is empty. <a href="${esc(root.dataset.cart || "/shop/cart")}">Return to cart</a>`;
+			return;
+		}
+
+		// Countries, labelled in the visitor's language
+		const names = new Intl.DisplayNames([navigator.language || "en"], { type: "region" });
+		const sorted = COUNTRIES.map((code) => ({ code, name: names.of(code) ?? code })).sort((a, b) =>
+			a.name.localeCompare(b.name),
+		);
+		countrySelect.innerHTML =
+			`<option value="">Select a country</option>` +
+			sorted.map((c) => `<option value="${c.code}">${esc(c.name)}</option>`).join("");
+		countrySelect.value = (root.dataset.defaultCountry || config.storeCountry || "").toUpperCase();
+
+		// Payment options
+		const gateways: Array<{ id: "stripe" | "paypal"; label: string }> = [];
+		if (config.payments.stripe.enabled) gateways.push({ id: "stripe", label: "Card" });
+		if (config.payments.paypal.enabled) gateways.push({ id: "paypal", label: "PayPal" });
+		gatewaysEl.innerHTML = gateways.length
+			? gateways
+					.map(
+						(g, i) =>
+							`<label class="ec-option"><input type="radio" name="paymentGateway" value="${g.id}" ${i === 0 ? "checked" : ""}/><span>${g.label}</span></label>`,
+					)
+					.join("")
+			: `<p class="ec-muted">Online payment isn't set up for this store yet.</p>`;
+		continueBtn.disabled = gateways.length === 0;
+
+		statusEl.hidden = true;
+		layout.hidden = false;
+		renderSummary();
+
+		// ─── Quote refresh ─────────────────────────────────────
+		function field(name: string) {
+			return (form.elements.namedItem(name) as HTMLInputElement | null)?.value.trim() ?? "";
+		}
+
+		async function refreshQuote() {
+			const countryCode = field("countryCode");
+			const seq = ++quoteSeq;
+			try {
+				const selected = form.querySelector<HTMLInputElement>('input[name="shippingMethodId"]:checked')?.value ?? null;
+				const next = await client.getCheckoutQuote(
+					countryCode
+						? { countryCode, stateCode: field("stateCode") || null, postalCode: field("postalCode"), city: field("city") }
+						: null,
+					selected,
+				);
+				if (seq !== quoteSeq) return; // a newer request superseded this one
+				quote = next;
+				renderShipping(Boolean(countryCode));
+				renderSummary();
+				if (quoteErrorShown) showError(null);
+				quoteErrorShown = false;
+			} catch (err) {
+				if (seq === quoteSeq) {
+					showError((err as Error).message);
+					quoteErrorShown = true;
+				}
+			}
+		}
+
+		let debounce: ReturnType<typeof setTimeout> | undefined;
+		const scheduleQuote = () => {
+			clearTimeout(debounce);
+			debounce = setTimeout(refreshQuote, 350);
+		};
+		for (const name of ["countryCode", "stateCode", "postalCode", "city"]) {
+			form.elements.namedItem(name)?.addEventListener(name === "countryCode" ? "change" : "input", scheduleQuote);
+		}
+		shippingEl.addEventListener("change", () => void refreshQuote());
+		if (countrySelect.value) void refreshQuote();
+
+		function renderShipping(hasCountry: boolean) {
+			if (!quote) return;
+			if (!hasCountry) {
+				shippingEl.innerHTML = `<p class="ec-muted">Enter your address to see shipping options.</p>`;
+				return;
+			}
+			if (quote.shippingMethods.length === 0) {
+				shippingEl.innerHTML = `<p class="ec-muted">Sorry, we don't ship to this address yet.</p>`;
+				return;
+			}
+			shippingEl.innerHTML = quote.shippingMethods
+				.map(
+					(m) => `<label class="ec-option">
+						<input type="radio" name="shippingMethodId" value="${esc(m.id)}" ${m.id === quote!.shippingMethodId ? "checked" : ""} />
+						<span>${esc(m.name)}</span><span>${m.cost === 0 ? "Free" : money(m.cost)}</span>
+					</label>`,
+				)
+				.join("");
+		}
+
+		function renderSummary() {
+			if (!quote) return;
+			$("[data-items]").innerHTML = quote.items
+				.map((item) => {
+					const attrs = Object.entries(item.attributes ?? {})
+						.map(([k, v]) => `${esc(k)}: ${esc(v)}`)
+						.join(", ");
+					return `<li><span>${esc(item.name)} × ${item.quantity}${attrs ? `<small>${attrs}</small>` : ""}</span><span>${money(item.lineTotal)}</span></li>`;
+				})
+				.join("");
+
+			const rows: string[] = [`<dt>Subtotal</dt><dd>${money(quote.subtotal)}</dd>`];
+			for (const d of quote.discountBreakdown) {
+				rows.push(`<dt>Discount (${esc(d.name)})</dt><dd>−${money(d.amount)}</dd>`);
+			}
+			const hasShipping = Boolean(quote.shippingMethodId);
+			rows.push(`<dt>Shipping</dt><dd>${hasShipping ? (quote.shippingTotal === 0 ? "Free" : money(quote.shippingTotal)) : "—"}</dd>`);
+			if (!quote.taxInclusive) {
+				if (quote.taxLines.length === 0) rows.push(`<dt>Tax</dt><dd>${money(0)}</dd>`);
+				for (const line of quote.taxLines) rows.push(`<dt>${esc(line.name)}</dt><dd>${money(line.amount)}</dd>`);
+			}
+			rows.push(`<dt class="ec-total">Total</dt><dd class="ec-total" data-total>${money(quote.total)} <small>${esc(quote.currencyCode)}</small></dd>`);
+			if (quote.taxInclusive && quote.taxTotal > 0) {
+				const names = quote.taxLines.map((l) => l.name).join(", ") || "tax";
+				rows.push(`<dd class="ec-note">Includes ${money(quote.taxTotal)} ${esc(names)}</dd>`);
+			}
+			$("[data-totals]").innerHTML = rows.join("");
+		}
+
+		// ─── Validation + order creation ───────────────────────
+		function readAddress(): CheckoutAddress {
+			return {
+				firstName: field("firstName"),
+				lastName: field("lastName"),
+				company: field("company") || null,
+				addressLine1: field("addressLine1"),
+				addressLine2: field("addressLine2") || null,
+				city: field("city"),
+				stateCode: field("stateCode") || null,
+				postalCode: field("postalCode"),
+				countryCode: field("countryCode"),
+				phone: field("phone") || null,
+			};
+		}
+
+		function validate(): boolean {
+			let firstInvalid: HTMLElement | null = null;
+			form.querySelectorAll<HTMLInputElement | HTMLSelectElement>("input[required], select[required]").forEach((el) => {
+				const ok = el.checkValidity() && el.value.trim() !== "";
+				el.setAttribute("aria-invalid", ok ? "false" : "true");
+				if (!ok && !firstInvalid) firstInvalid = el;
+			});
+			if (firstInvalid) {
+				(firstInvalid as HTMLElement).focus();
+				showError("Please complete the highlighted fields.");
+				return false;
+			}
+			if (!quote?.shippingMethodId) {
+				showError("Please choose a shipping method.");
+				return false;
+			}
+			return true;
+		}
+
+		function lockForm(locked: boolean) {
+			form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input, select, textarea").forEach((el) => {
+				el.disabled = locked;
+			});
+			continueBtn.hidden = locked;
+			paymentArea.hidden = !locked;
+			editBtn.hidden = !locked;
+		}
+
+		function orderInput(gateway: "stripe" | "paypal") {
+			return {
+				email: field("email"),
+				billingAddress: readAddress(),
+				shippingAddress: null,
+				shippingMethodId: quote!.shippingMethodId!,
+				paymentGateway: gateway,
+				customerNote: field("customerNote") || null,
+				expectedTotal: quote!.total,
+			};
+		}
+
+		function goToConfirmation(orderId: string) {
+			const path = root.dataset.confirmation || "/shop/order-confirmation";
+			window.location.href = `${path}?order=${encodeURIComponent(orderId)}`;
+		}
+
+		editBtn.addEventListener("click", () => {
+			// The unpaid order is released automatically by the store
+			window.location.reload();
+		});
+
+		form.addEventListener("submit", async (event) => {
+			event.preventDefault();
+			showError(null);
+			if (!validate()) return;
+			const gateway = (form.querySelector<HTMLInputElement>('input[name="paymentGateway"]:checked')?.value ??
+				"stripe") as "stripe" | "paypal";
+
+			continueBtn.disabled = true;
+			continueBtn.textContent = "Preparing payment…";
+			try {
+				if (gateway === "stripe") await startStripe(orderInput("stripe"));
+				else await startPayPal();
+			} catch (err) {
+				showError(
+					/Failed to load/.test((err as Error).message)
+						? "The payment form couldn't load. Check your connection (or ad blocker) and try again."
+						: (err as Error).message,
+				);
+				lockForm(false);
+				if (gateway === "stripe") order = null;
+				void refreshQuote();
+			} finally {
+				continueBtn.disabled = false;
+				continueBtn.textContent = "Continue to payment";
+			}
+		});
+
+		// ─── Stripe (Payment Element) ──────────────────────────
+		async function startStripe(input: ReturnType<typeof orderInput>) {
+			const stripe = await client.loadStripe(config.payments.stripe.publishableKey!);
+			order = await client.createOrder(input);
+			lockForm(true);
+			const elements = stripe.elements({ clientSecret: order.clientSecret });
+			const paymentElement = elements.create("payment", {
+				defaultValues: { billingDetails: { email: input.email, name: `${input.billingAddress.firstName} ${input.billingAddress.lastName}` } },
+			});
+			paymentElement.mount($("[data-stripe-element]"));
+			payBtn.hidden = false;
+			payBtn.textContent = `Pay ${money(order.total)}`;
+			payBtn.onclick = async () => {
+				if (!order) return;
+				payBtn.disabled = true;
+				showError(null);
+				const returnUrl = new URL(root.dataset.confirmation || "/shop/order-confirmation", window.location.href);
+				returnUrl.searchParams.set("order", order.orderId);
+				const { error } = await stripe.confirmPayment({
+					elements,
+					confirmParams: { return_url: returnUrl.toString() },
+					redirect: "if_required",
+				});
+				if (error) {
+					showError(error.message ?? "Payment failed");
+					payBtn.disabled = false;
+					return;
+				}
+				await client.confirmOrder(order.orderId).catch(() => null);
+				goToConfirmation(order.orderId);
+			};
+		}
+
+		// ─── PayPal (Smart Buttons) ────────────────────────────
+		async function startPayPal() {
+			const paypal = await client.loadPayPal(config.payments.paypal.clientId!, config.currency.code);
+			lockForm(true);
+			const container = $("[data-paypal-buttons]");
+			container.innerHTML = "";
+			await paypal
+				.Buttons({
+					createOrder: async () => {
+						order = await client.createOrder(orderInput("paypal"));
+						return order.clientSecret; // PayPal order ID
+					},
+					onApprove: async () => {
+						if (!order) return;
+						const result = await client.confirmOrder(order.orderId);
+						if (!result.paid && result.message) {
+							showError(result.message);
+							return;
+						}
+						goToConfirmation(order.orderId);
+					},
+					onError: (err: Error) => showError(err?.message || "PayPal couldn't process the payment."),
+				})
+				.render(container);
+		}
+	}
+</script>

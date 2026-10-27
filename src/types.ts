@@ -254,7 +254,19 @@ export interface Order {
 	currencyCode: string;
 	paymentMethod: string;
 	paymentIntentId: string | null;
+	/** Provider capture/charge reference once paid (PayPal capture ID, Stripe charge ID) */
+	paymentCaptureId?: string | null;
 	paymentStatus: PaymentStatus;
+	/** Cart the order was created from; deleted once payment succeeds */
+	cartId?: string | null;
+	/** Coupon codes applied (usage counts are incremented once payment succeeds) */
+	couponCodes?: string[];
+	/** Whether item prices included tax when the order was placed */
+	taxInclusive?: boolean;
+	/** Tax contained in shippingTotal */
+	shippingTax?: number;
+	/** Human-readable shipping method name, snapshotted at order time */
+	shippingMethodName?: string | null;
 	refunds: Refund[];
 	adminNotes: AdminNote[];
 	ipAddress: string | null;

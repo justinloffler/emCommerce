@@ -40,6 +40,8 @@ interface Props {
 	sku?: string | null;
 	inStock?: boolean;
 	showCartDrawer?: boolean;
+	/** Checkout link used by the cart drawer */
+	checkoutPath?: string;
 }
 
 const {
@@ -57,6 +59,7 @@ const {
 	sku,
 	inStock = true,
 	showCartDrawer = true,
+	checkoutPath = "/checkout",
 } = Astro.props;
 
 const hasVariants = variants.length > 0;
@@ -126,7 +129,7 @@ const defaultVariant = hasVariants ? variants.find((v) => v.enabled) : null;
 	<slot name="below-description" />
 </div>
 
-{showCartDrawer && <CartDrawer currencySymbol={currencySymbol} />}
+{showCartDrawer && <CartDrawer currencySymbol={currencySymbol} checkoutPath={checkoutPath} />}
 
 <style>
 	.ec-page--product-detail {

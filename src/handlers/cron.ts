@@ -4,12 +4,75 @@
  * - cart-cleanup: Remove expired carts
  * - exchange-rate-sync: Fetch exchange rates from API
  * - low-stock-check: Send alerts for low stock products
+ * - pending-order-cleanup: Resolve orders left awaiting payment
  */
 
 import type { StorageCollection } from "emdash";
 import type { PluginContext } from "emdash";
-import type { Cart, Currency, Product, Variant } from "../types.js";
+import type { Cart, Currency, Order, Product, Variant } from "../types.js";
 import { getLowStockProducts } from "../engine/inventory.js";
+import { getGateway, initGateways } from "../payments/gateway-registry.js";
+import { cancelUnpaidOrder, markOrderPaid } from "./order-payment.js";
+
+/** Orders still awaiting payment after this many hours are resolved by cron. */
+export const DEFAULT_PENDING_ORDER_TIMEOUT_HOURS = 24;
+
+/**
+ * Resolve orders stuck in pending_payment (abandoned checkouts, or payments
+ * whose confirmation was missed). Each one is checked with its payment
+ * provider first: paid orders are marked paid, everything else is cancelled
+ * and its reserved stock released.
+ */
+export async function handlePendingOrderCleanup(ctx: PluginContext): Promise<{ paid: number; cancelled: number }> {
+	const orders = ctx.storage.orders as StorageCollection<Order>;
+	const hours = (await ctx.kv.get<number>("settings:pendingOrderTimeoutHours")) ?? DEFAULT_PENDING_ORDER_TIMEOUT_HOURS;
+	const cutoff = new Date(Date.now() - hours * 3_600_000).toISOString();
+	if (ctx.http) initGateways({ http: ctx.http, kv: ctx.kv });
+
+	let paid = 0;
+	let cancelled = 0;
+	let cursor: string | undefined;
+	const stale: Array<{ id: string; data: Order }> = [];
+	do {
+		const batch = await orders.query({
+			where: { status: "pending_payment", createdAt: { lt: cutoff } },
+			orderBy: { createdAt: "asc" },
+			limit: 100,
+			cursor,
+		});
+		stale.push(...batch.items);
+		cursor = batch.hasMore ? batch.cursor : undefined;
+	} while (cursor && stale.length < 1000);
+
+	for (const { id, data } of stale) {
+		try {
+			const gateway = ctx.http && data.paymentIntentId ? getGateway(data.paymentMethod) : undefined;
+			if (gateway && data.paymentIntentId) {
+				const verification = await gateway.finalizePayment(data.paymentIntentId);
+				if (verification.status === "succeeded") {
+					const res = await markOrderPaid(ctx, id, {
+						source: "webhook",
+						amount: verification.amount,
+						currency: verification.currency,
+						captureId: verification.captureId,
+					});
+					if (res.outcome === "paid") paid++;
+					continue;
+				}
+				if (verification.status === "pending" && verification.amount !== null) {
+					// Payment is genuinely in flight (e.g. bank transfer) — leave it
+					continue;
+				}
+			}
+			if (await cancelUnpaidOrder(ctx, id, `No payment received within ${hours} hours`)) cancelled++;
+		} catch (err) {
+			ctx.log.error("Pending order cleanup failed for order", { orderId: id, error: String(err) });
+		}
+	}
+
+	if (paid || cancelled) ctx.log.info(`Pending order cleanup: ${paid} paid, ${cancelled} cancelled`);
+	return { paid, cancelled };
+}
 
 /**
  * Remove carts that have passed their expiration date.
@@ -18,21 +81,18 @@ export async function handleCartCleanup(ctx: PluginContext): Promise<void> {
 	const carts = ctx.storage.carts as StorageCollection<Cart>;
 	const now = new Date().toISOString();
 
-	let cursor: string | undefined;
 	let deleted = 0;
-	do {
+	// Deleting while paging would skip rows, so re-read the first page each time
+	for (let round = 0; round < 1000; round++) {
 		const batch = await carts.query({
 			where: { expiresAt: { lt: now } },
 			limit: 100,
-			cursor,
 		});
 		const ids = batch.items.map((item) => item.id);
-		if (ids.length > 0) {
-			await carts.deleteMany(ids);
-			deleted += ids.length;
-		}
-		cursor = batch.cursor;
-	} while (cursor);
+		if (ids.length === 0) break;
+		deleted += await carts.deleteMany(ids);
+		if (!batch.hasMore) break;
+	}
 
 	ctx.log.info(`Cart cleanup: removed ${deleted} expired carts`);
 }

@@ -15,18 +15,25 @@
  * ```
  */
 
-import type { PluginDescriptor, ResolvedPlugin, RouteContext, StorageCollection } from "emdash";
+import type { PluginDescriptor, ResolvedPlugin, StorageCollection } from "emdash";
 import type { CustomerGroup } from "./types.js";
-import type { ProductListInput } from "./schemas/products.js";
 import { definePlugin } from "emdash";
 import { ulid } from "ulidx";
 
 import { PLUGIN_ID, PLUGIN_VERSION, DEFAULT_TAX_CLASSES, COMMON_CURRENCIES } from "./constants.js";
 
 // Phase 5: Checkout
-import { checkoutCreateHandler, checkoutConfirmHandler } from "./handlers/checkout.js";
+import { checkoutCreateHandler, checkoutConfirmHandler, checkoutQuoteHandler } from "./handlers/checkout.js";
 import { checkoutCreateSchema, checkoutConfirmSchema } from "./schemas/checkout.js";
-import { stripeWebhookHandler, paypalWebhookHandler } from "./handlers/webhooks.js";
+import {
+	stripeWebhookHandler, paypalWebhookHandler, STRIPE_WEBHOOK_HEADERS, PAYPAL_WEBHOOK_HEADERS,
+} from "./handlers/webhooks.js";
+import {
+	storefrontConfigHandler, storefrontProductListHandler, storefrontProductGetHandler,
+} from "./handlers/storefront.js";
+import {
+	storefrontProductListSchema, storefrontProductGetSchema, checkoutQuoteSchema,
+} from "./schemas/storefront.js";
 
 // Phase 6: Orders & Customers
 import {
@@ -83,7 +90,7 @@ import {
 import { settingsGetHandler, settingsUpdateHandler, setupWizardHandler, emailSettingsListHandler, emailSettingUpdateHandler } from "./handlers/settings.js";
 import { settingsUpdateSchema, setupWizardSchema, emailSettingSchema } from "./schemas/settings.js";
 import { dashboardStatsHandler, recentOrdersHandler, lowStockHandler } from "./handlers/dashboard.js";
-import { handleCartCleanup, handleExchangeRateSync, handleLowStockCheck } from "./handlers/cron.js";
+import { handleCartCleanup, handleExchangeRateSync, handleLowStockCheck, handlePendingOrderCleanup } from "./handlers/cron.js";
 
 // Custom Fields
 import { customFieldListHandler, customFieldCreateHandler, customFieldUpdateHandler, customFieldDeleteHandler } from "./handlers/custom-fields.js";
@@ -226,7 +233,7 @@ export function emCommercePlugin(
 			"specific-prices": { indexes: ["productId", "variantId", "customerGroupId", "priority"] },
 			"catalog-price-rules": { indexes: ["enabled", "priority"] },
 			carts: { indexes: ["sessionId", "userId", "expiresAt"] },
-			orders: { indexes: ["status", "customerId", "customerEmail", "paymentStatus", "createdAt"], uniqueIndexes: ["orderNumber"] },
+			orders: { indexes: ["status", "customerId", "customerEmail", "paymentStatus", "paymentIntentId", "paymentCaptureId", "createdAt"], uniqueIndexes: ["orderNumber"] },
 			customers: { indexes: ["userId", "groupId", "createdAt"], uniqueIndexes: ["email"] },
 			"customer-groups": { indexes: ["isDefault", "createdAt"], uniqueIndexes: ["slug"] },
 			"shipping-zones": { indexes: ["sortOrder"] },
@@ -360,6 +367,8 @@ export function createPlugin(options: EmCommercePluginOptions = {}): ResolvedPlu
 						await ctx.cron.schedule("exchange-rate-sync", { schedule: "@daily" });
 						// Daily low stock check
 						await ctx.cron.schedule("low-stock-check", { schedule: "@daily" });
+						// Hourly: resolve orders left awaiting payment
+						await ctx.cron.schedule("pending-order-cleanup", { schedule: "@hourly" });
 					}
 				},
 			},
@@ -370,6 +379,7 @@ export function createPlugin(options: EmCommercePluginOptions = {}): ResolvedPlu
 						await ctx.cron.cancel("cart-cleanup").catch(() => {});
 						await ctx.cron.cancel("exchange-rate-sync").catch(() => {});
 						await ctx.cron.cancel("low-stock-check").catch(() => {});
+						await ctx.cron.cancel("pending-order-cleanup").catch(() => {});
 					}
 				},
 			},
@@ -386,6 +396,9 @@ export function createPlugin(options: EmCommercePluginOptions = {}): ResolvedPlu
 						case "low-stock-check":
 							await handleLowStockCheck(ctx);
 							break;
+						case "pending-order-cleanup":
+							await handlePendingOrderCleanup(ctx);
+							break;
 					}
 				},
 			},
@@ -396,20 +409,21 @@ export function createPlugin(options: EmCommercePluginOptions = {}): ResolvedPlu
 			// PUBLIC STOREFRONT ROUTES
 			// ═══════════════════════════════════════════════════════
 
+			"storefront/config": {
+				public: true,
+				handler: storefrontConfigHandler,
+			},
+
 			"storefront/products": {
 				public: true,
-				input: productListSchema,
-				handler: async (ctx: RouteContext<ProductListInput>) => {
-					// Override: only show active products on storefront
-					ctx.input.status = "active";
-					return productListHandler(ctx);
-				},
-			} as never,
+				input: storefrontProductListSchema,
+				handler: storefrontProductListHandler as never,
+			},
 
 			"storefront/product": {
 				public: true,
-				input: productGetSchema,
-				handler: productGetHandler as never,
+				input: storefrontProductGetSchema,
+				handler: storefrontProductGetHandler as never,
 			},
 
 			// ═══════════════════════════════════════════════════════
@@ -587,6 +601,11 @@ export function createPlugin(options: EmCommercePluginOptions = {}): ResolvedPlu
 			// PUBLIC: CHECKOUT & WEBHOOKS
 			// ═══════════════════════════════════════════════════════
 
+			"storefront/checkout/quote": {
+				public: true,
+				input: checkoutQuoteSchema,
+				handler: checkoutQuoteHandler as never,
+			},
 			"storefront/checkout/create": {
 				public: true,
 				input: checkoutCreateSchema,
@@ -613,11 +632,15 @@ export function createPlugin(options: EmCommercePluginOptions = {}): ResolvedPlu
 			},
 			"webhook/stripe": {
 				public: true,
-				handler: stripeWebhookHandler,
+				methods: ["POST"],
+				request: { body: "text", maxBytes: 512 * 1024, headers: STRIPE_WEBHOOK_HEADERS },
+				handler: stripeWebhookHandler as never,
 			},
 			"webhook/paypal": {
 				public: true,
-				handler: paypalWebhookHandler,
+				methods: ["POST"],
+				request: { body: "text", maxBytes: 512 * 1024, headers: PAYPAL_WEBHOOK_HEADERS },
+				handler: paypalWebhookHandler as never,
 			},
 
 			// ═══════════════════════════════════════════════════════
@@ -753,6 +776,7 @@ export function createPlugin(options: EmCommercePluginOptions = {}): ResolvedPlu
 				paypalClientId: { type: "string", label: "PayPal Client ID" },
 				paypalClientSecret: { type: "secret", label: "PayPal Client Secret" },
 				paypalSandbox: { type: "boolean", label: "PayPal Sandbox Mode" },
+				paypalWebhookId: { type: "string", label: "PayPal Webhook ID" },
 			},
 			pages: [
 				{ path: "/", label: "emCommerce", icon: "storefront" },

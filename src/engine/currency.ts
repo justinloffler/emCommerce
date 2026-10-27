@@ -39,6 +39,45 @@ export function applyPercentageReduction(
 }
 
 /**
+ * Apply a basis-point rate with half-up rounding (used for tax, where
+ * flooring would systematically under-collect).
+ */
+export function applyRateRounded(amount: number, basisPoints: number): number {
+	const scaled = BigInt(amount) * BigInt(basisPoints);
+	const half = BigInt(BASIS_POINTS_100_PERCENT / 2);
+	return Number((scaled + half) / BigInt(BASIS_POINTS_100_PERCENT));
+}
+
+/**
+ * Split an integer `total` across `weights` proportionally, using the
+ * largest-remainder method so the parts always sum exactly to `total`.
+ * Weights must be non-negative; if they're all zero the total goes to index 0.
+ */
+export function allocateProportionally(total: number, weights: number[]): number[] {
+	const parts = weights.map(() => 0);
+	if (weights.length === 0 || total === 0) return parts;
+	const sum = weights.reduce((a, b) => a + b, 0);
+	if (sum <= 0) {
+		parts[0] = total;
+		return parts;
+	}
+	const remainders: Array<{ index: number; rem: number }> = [];
+	let allocated = 0;
+	weights.forEach((w, index) => {
+		const exact = (total * w) / sum;
+		const floor = Math.floor(exact);
+		parts[index] = floor;
+		allocated += floor;
+		remainders.push({ index, rem: exact - floor });
+	});
+	remainders.sort((a, b) => b.rem - a.rem || a.index - b.index);
+	for (let i = 0; allocated < total; i++, allocated++) {
+		parts[remainders[i % remainders.length].index] += 1;
+	}
+	return parts;
+}
+
+/**
  * Calculate the percentage (in basis points) that `part` is of `whole`.
  */
 export function percentageOf(part: number, whole: number): number {

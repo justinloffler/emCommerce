@@ -11,6 +11,7 @@ export async function settingsGetHandler(ctx: RouteContext) {
 		setupComplete, storeName, storeCountry, storeAddress, defaultCurrency, taxInclusive, enabledProductTypes,
 		stripePublishableKey, stripeSecretKey, stripeWebhookSecret,
 		paypalClientId, paypalClientSecret, paypalSandbox, shipEngineApiKey,
+		storeEmail, taxShipping, pendingOrderTimeoutHours, paypalWebhookId,
 	] = await Promise.all([
 		ctx.kv.get<boolean>("state:setupComplete"),
 		ctx.kv.get<string>("settings:storeName"),
@@ -26,6 +27,10 @@ export async function settingsGetHandler(ctx: RouteContext) {
 		ctx.kv.get<string>("settings:paypalClientSecret"),
 		ctx.kv.get<boolean>("settings:paypalSandbox"),
 		ctx.kv.get<string>("settings:shipEngineApiKey"),
+		ctx.kv.get<string>("settings:storeEmail"),
+		ctx.kv.get<boolean>("settings:taxShipping"),
+		ctx.kv.get<number>("settings:pendingOrderTimeoutHours"),
+		ctx.kv.get<string>("settings:paypalWebhookId"),
 	]);
 
 	// Mask secret values — return only whether they're set, not the actual value
@@ -49,6 +54,14 @@ export async function settingsGetHandler(ctx: RouteContext) {
 		paypalClientSecret: mask(paypalClientSecret),
 		paypalSandbox: paypalSandbox ?? true,
 		shipEngineApiKey: mask(shipEngineApiKey),
+		storeEmail: storeEmail ?? "",
+		taxShipping: taxShipping ?? false,
+		pendingOrderTimeoutHours: pendingOrderTimeoutHours ?? 24,
+		paypalWebhookId: paypalWebhookId ?? "",
+		webhookUrls: {
+			stripe: "/_emdash/api/plugins/emcommerce/webhook/stripe",
+			paypal: "/_emdash/api/plugins/emcommerce/webhook/paypal",
+		},
 	};
 }
 
@@ -61,6 +74,11 @@ export async function settingsUpdateHandler(ctx: RouteContext<SettingsUpdateInpu
 	if (input.defaultCurrency !== undefined) await ctx.kv.set("settings:defaultCurrency", input.defaultCurrency);
 	if (input.taxInclusive !== undefined) await ctx.kv.set("settings:taxInclusive", input.taxInclusive);
 	if (input.enabledProductTypes !== undefined) await ctx.kv.set("settings:enabledProductTypes", input.enabledProductTypes);
+	if (input.storeEmail !== undefined) await ctx.kv.set("settings:storeEmail", input.storeEmail);
+	if (input.taxShipping !== undefined) await ctx.kv.set("settings:taxShipping", input.taxShipping);
+	if (input.pendingOrderTimeoutHours !== undefined)
+		await ctx.kv.set("settings:pendingOrderTimeoutHours", input.pendingOrderTimeoutHours);
+	if (input.paypalWebhookId !== undefined) await ctx.kv.set("settings:paypalWebhookId", input.paypalWebhookId.trim());
 
 	// Payment keys — only save if non-empty and not the masked placeholder
 	const isMasked = (v?: string) => !v || v.startsWith("••••");

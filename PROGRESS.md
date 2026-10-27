@@ -111,11 +111,23 @@ npx astro dev
 - [x] External REST API (WooCommerce-style) — 17 endpoints at `api/v1/*`
 - [x] Webhook system — register delivery URLs per topic, HMAC-SHA256 signatures
 
+## emdash 1.3 / Astro 7 + Checkout ✅
+- [x] Compatible with emdash 1.3.x / Astro 7 (capability names, types, KV without TTL)
+- [x] Public storefront API returns allow-listed product views (active only, no cost/download data)
+- [x] `storefront/config`, `storefront/checkout/quote` routes; `/server` helper for Astro pages
+- [x] Checkout totals engine (per-class tax, inclusive tax extraction, discount allocation, shipping tax)
+- [x] Payments verified server-side; signed webhooks; idempotent mark-paid with compare-and-set
+- [x] Guest customers, coupon usage counts, customer stats, correct cart removal
+- [x] Pending-order cleanup cron; stock released on failure/cancellation
+- [x] CheckoutPage + OrderConfirmationPage components
+- [x] Vitest suite (59 tests)
+
 ## Phase 9: Polish & Testing
 - [x] Admin UI (admin.tsx) — full CRUD for all entities, internal nav, custom fields
 - [ ] Unit tests for pricing engine
 - [ ] Unit tests for cart engine
-- [ ] Unit tests for tax/shipping engines
+- [x] Unit tests for tax engine and checkout totals
+- [ ] Unit tests for shipping engine
 - [ ] Integration tests
 - [ ] CSS styles file (styles/emcommerce.css)
 

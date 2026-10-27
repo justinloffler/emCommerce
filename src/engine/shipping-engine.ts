@@ -63,6 +63,10 @@ export async function getShippingRates(
 
 /**
  * Calculate cost for a specific shipping method by its ID.
+ *
+ * Returns null when the method doesn't exist, is disabled, isn't available in
+ * the zone matching this address, or isn't eligible for this order — callers
+ * must treat that as an error rather than free shipping.
  */
 export async function getShippingCost(
 	methodId: string,
@@ -71,14 +75,15 @@ export async function getShippingCost(
 	orderSubtotal: number,
 	hasFreeShippingCoupon: boolean,
 	storage: ShippingStorageAccess,
-): Promise<number> {
+): Promise<{ cost: number; name: string } | null> {
 	const zone = await findMatchingZone(address, storage);
-	if (!zone) return 0;
+	if (!zone) return null;
 
 	const method = zone.data.methods.find((m) => m.id === methodId);
-	if (!method || !method.enabled) return 0;
+	if (!method || !method.enabled) return null;
 
-	return calculateMethodCost(method, orderWeight, orderSubtotal, hasFreeShippingCoupon) ?? 0;
+	const cost = calculateMethodCost(method, orderWeight, orderSubtotal, hasFreeShippingCoupon);
+	return cost === null ? null : { cost, name: method.name };
 }
 
 // ─── Zone Matching ──────────────────────────────────────────────
@@ -93,18 +98,19 @@ async function findMatchingZone(
 		limit: 100,
 	});
 
-	// Find the first zone whose regions match the address
+	const country = address.countryCode.toUpperCase();
+	const state = address.stateCode?.toUpperCase() ?? null;
+
+	// Find the first zone whose regions match the address. Zones with no
+	// regions ("Rest of World") are only used as a fallback below, so they
+	// can't shadow a more specific zone regardless of sort order.
 	for (const item of result.items) {
 		const zone = item.data;
-
-		// Empty regions = "Rest of World" (matches everything)
-		if (zone.regions.length === 0) {
-			return { id: item.id, data: zone };
-		}
+		if (zone.regions.length === 0) continue;
 
 		const matches = zone.regions.some((region) => {
-			if (region.countryCode !== address.countryCode) return false;
-			if (region.stateCode && region.stateCode !== address.stateCode) return false;
+			if (region.countryCode.toUpperCase() !== country) return false;
+			if (region.stateCode && region.stateCode.toUpperCase() !== state) return false;
 			return true;
 		});
 

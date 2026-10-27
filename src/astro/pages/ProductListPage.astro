@@ -32,6 +32,8 @@ interface Props {
 	columns?: 2 | 3 | 4;
 	/** Show cart drawer */
 	showCartDrawer?: boolean;
+	/** Checkout link used by the cart drawer */
+	checkoutPath?: string;
 }
 
 const {
@@ -41,6 +43,7 @@ const {
 	basePath = "/products/",
 	columns = 3,
 	showCartDrawer = true,
+	checkoutPath = "/checkout",
 } = Astro.props;
 ---
 
@@ -60,7 +63,7 @@ const {
 	<slot name="pagination" />
 </div>
 
-{showCartDrawer && <CartDrawer currencySymbol={currencySymbol} />}
+{showCartDrawer && <CartDrawer currencySymbol={currencySymbol} checkoutPath={checkoutPath} />}
 
 <style>
 	.ec-page--product-list {
