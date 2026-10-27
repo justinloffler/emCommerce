@@ -10,7 +10,7 @@ const API_BASE = "/_emdash/api/plugins/emcommerce";
 
 // ─── Session ────────────────────────────────────────────────────
 
-function getSessionId(): string {
+export function getSessionId(): string {
 	let id = localStorage.getItem(STORAGE_KEY);
 	if (!id) {
 		id = crypto.randomUUID();
@@ -67,9 +67,12 @@ type CartListener = (cart: ClientCartSummary) => void;
 const listeners: CartListener[] = [];
 let currentCart: ClientCartSummary | null = null;
 
-function notify(cart: ClientCartSummary) {
+function notify(cart: ClientCartSummary, changed = false) {
 	currentCart = cart;
 	for (const fn of listeners) fn(cart);
+	if (changed && typeof document !== "undefined") {
+		document.dispatchEvent(new CustomEvent("ec:cart-updated", { detail: cart }));
+	}
 }
 
 /** Subscribe to cart changes. Returns an unsubscribe function. */
@@ -108,7 +111,7 @@ export async function addToCart(
 		variantId: variantId ?? null,
 		quantity,
 	});
-	notify(cart);
+	notify(cart, true);
 	return cart;
 }
 
@@ -123,7 +126,7 @@ export async function updateCartItem(
 		variantId,
 		quantity,
 	});
-	notify(cart);
+	notify(cart, true);
 	return cart;
 }
 
@@ -136,7 +139,7 @@ export async function removeFromCart(
 		productId,
 		variantId: variantId ?? null,
 	});
-	notify(cart);
+	notify(cart, true);
 	return cart;
 }
 
@@ -145,7 +148,7 @@ export async function applyCoupon(code: string): Promise<ClientCartSummary> {
 		sessionId: getSessionId(),
 		code,
 	});
-	notify(cart);
+	notify(cart, true);
 	return cart;
 }
 
@@ -154,7 +157,7 @@ export async function removeCoupon(code: string): Promise<ClientCartSummary> {
 		sessionId: getSessionId(),
 		code,
 	});
-	notify(cart);
+	notify(cart, true);
 	return cart;
 }
 
@@ -178,7 +181,7 @@ export async function setAddress(
 		type,
 		...address,
 	});
-	notify(cart);
+	notify(cart, true);
 	return cart;
 }
 
@@ -189,6 +192,6 @@ export async function setShippingMethod(
 		sessionId: getSessionId(),
 		shippingMethodId,
 	});
-	notify(cart);
+	notify(cart, true);
 	return cart;
 }

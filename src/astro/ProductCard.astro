@@ -104,7 +104,7 @@ const href = `${basePath}${slug}`;
 		margin: 0 0.75rem 0.75rem;
 		padding: 0.5rem 1rem;
 		background: var(--ec-color-primary, #2563eb);
-		color: white;
+		color: var(--ec-color-on-primary, #fff);
 		border: none;
 		border-radius: 0.375rem;
 		font-size: 0.875rem;
@@ -116,3 +116,26 @@ const href = `${basePath}${slug}`;
 		background: var(--ec-color-primary-hover, #1d4ed8);
 	}
 </style>
+
+<script>
+	document.querySelectorAll<HTMLButtonElement>("[data-add-to-cart]").forEach((btn) => {
+		if (btn.dataset.ecBound) return;
+		btn.dataset.ecBound = "1";
+		const label = btn.textContent?.trim() || "Add to Cart";
+		btn.addEventListener("click", async () => {
+			btn.disabled = true;
+			btn.textContent = "Adding...";
+			try {
+				const { addToCart } = await import("@emdash-cms/plugin-emcommerce/client");
+				await addToCart(btn.dataset.addToCart!, null, 1);
+				btn.textContent = "Added!";
+			} catch {
+				btn.textContent = "Error";
+			}
+			setTimeout(() => {
+				btn.textContent = label;
+				btn.disabled = false;
+			}, 1500);
+		});
+	});
+</script>

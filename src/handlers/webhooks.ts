@@ -1,145 +1,140 @@
 /**
  * Payment webhook handlers.
  *
- * Receives events from Stripe and PayPal to update order status.
+ * Receive events from Stripe and PayPal. Events are only acted on after the
+ * gateway has verified the signature (Stripe: HMAC with the endpoint secret;
+ * PayPal: the verify-webhook-signature API with the configured webhook ID).
+ *
+ * Routes are declared with `request: { body: "text" }`, so `ctx.input` is the
+ * raw, unparsed body — required for signature verification.
  */
 
 import type { RouteContext, StorageCollection } from "emdash";
+import { PluginRouteError } from "emdash";
 import { ulid } from "ulidx";
-import { requireHttp } from "./context.js";
 
-import type { Order } from "../types.js";
-import { initGateways, getGateway } from "../payments/gateway-registry.js";
+import { sendOrderEmail } from "../emails.js";
+import { getGateway, initGateways } from "../payments/gateway-registry.js";
 import type { WebhookResult } from "../payments/types.js";
-import { releaseStock } from "../engine/inventory.js";
-import type { Product, Variant } from "../types.js";
+import type { Order } from "../types.js";
+import { requireHttp } from "./context.js";
+import { findOrderByPaymentRef, markOrderPaid, recordPaymentFailure } from "./order-payment.js";
 
-/**
- * Handle Stripe webhook events.
- */
-export async function stripeWebhookHandler(ctx: RouteContext) {
-	initGateways({ http: requireHttp(ctx), kv: ctx.kv });
-	const gateway = getGateway("stripe");
-	if (!gateway) return { received: false };
+export const STRIPE_WEBHOOK_HEADERS = ["stripe-signature"];
+export const PAYPAL_WEBHOOK_HEADERS = [
+	"paypal-auth-algo",
+	"paypal-cert-url",
+	"paypal-transmission-id",
+	"paypal-transmission-sig",
+	"paypal-transmission-time",
+];
 
-	const result = await gateway.handleWebhook(ctx.request as Request);
-	return handleWebhookResult(result, ctx);
+export async function stripeWebhookHandler(ctx: RouteContext<string>) {
+	return handleWebhook(ctx, "stripe", STRIPE_WEBHOOK_HEADERS);
 }
 
-/**
- * Handle PayPal webhook events.
- */
-export async function paypalWebhookHandler(ctx: RouteContext) {
-	initGateways({ http: requireHttp(ctx), kv: ctx.kv });
-	const gateway = getGateway("paypal");
-	if (!gateway) return { received: false };
-
-	const result = await gateway.handleWebhook(ctx.request as Request);
-	return handleWebhookResult(result, ctx);
+export async function paypalWebhookHandler(ctx: RouteContext<string>) {
+	return handleWebhook(ctx, "paypal", PAYPAL_WEBHOOK_HEADERS);
 }
 
-async function handleWebhookResult(
-	result: WebhookResult | null | undefined,
-	ctx: RouteContext,
-) {
-	if (!result || result.type === "ignored") {
-		return { received: true };
+async function handleWebhook(ctx: RouteContext<string>, gatewayId: string, headerNames: string[]) {
+	initGateways({ http: requireHttp(ctx), kv: ctx.kv });
+	const gateway = getGateway(gatewayId);
+	if (!gateway) return { received: false };
+
+	const headers: Record<string, string> = {};
+	for (const name of headerNames) {
+		const value = ctx.request.headers.get(name);
+		if (value) headers[name] = value;
 	}
+	const rawBody = typeof ctx.input === "string" ? ctx.input : "";
 
-	const ordersCol = ctx.storage.orders as StorageCollection<Order>;
-
-	switch (result.type) {
-		case "payment_succeeded": {
-			// Find order by payment intent ID
-			const order = await findOrderByIntentId(result.intentId, ordersCol);
-			if (order) {
-				const now = new Date().toISOString();
-				order.data.status = "processing";
-				order.data.paymentStatus = "captured";
-				order.data.updatedAt = now;
-				order.data.adminNotes.push({
-					id: ulid(),
-					content: "Payment succeeded via webhook",
-					isSystem: true,
-					createdAt: now,
-				});
-				await ordersCol.put(order.id, order.data);
-			}
-			break;
-		}
-
-		case "payment_failed": {
-			const order = await findOrderByIntentId(result.intentId, ordersCol);
-			if (order) {
-				const now = new Date().toISOString();
-				order.data.status = "cancelled";
-				order.data.paymentStatus = "failed";
-				order.data.updatedAt = now;
-				order.data.adminNotes.push({
-					id: ulid(),
-					content: `Payment failed: ${result.reason}`,
-					isSystem: true,
-					createdAt: now,
-				});
-				await ordersCol.put(order.id, order.data);
-
-				// Release reserved stock
-				await releaseStock(
-					order.data.items.map((i) => ({
-						productId: i.productId,
-						variantId: i.variantId,
-						quantity: i.quantity,
-					})),
-					{
-						products: ctx.storage.products as StorageCollection<Product>,
-						variants: ctx.storage.variants as StorageCollection<Variant>,
-					},
-				);
-			}
-			break;
-		}
-
-		case "refund_succeeded": {
-			const order = await findOrderByIntentId(result.intentId, ordersCol);
-			if (order) {
-				const now = new Date().toISOString();
-				order.data.refunds.push({
-					id: ulid(),
-					amount: result.amount,
-					reason: "Refund processed via webhook",
-					refundId: result.refundId,
-					createdAt: now,
-				});
-				const totalRefunded = order.data.refunds.reduce((s, r) => s + r.amount, 0);
-				order.data.paymentStatus = totalRefunded >= order.data.total ? "refunded" : "partial_refund";
-				if (order.data.paymentStatus === "refunded") {
-					order.data.status = "refunded";
-				}
-				order.data.updatedAt = now;
-				await ordersCol.put(order.id, order.data);
-			}
-			break;
-		}
+	const result = await gateway.handleWebhook({ rawBody, headers });
+	if (result.type === "invalid_signature") {
+		ctx.log.warn(`Rejected ${gatewayId} webhook with an invalid signature`);
+		throw PluginRouteError.badRequest("Invalid webhook signature");
 	}
-
+	await applyWebhookResult(ctx, gatewayId, result);
 	return { received: true };
 }
 
-async function findOrderByIntentId(
-	intentId: string,
-	ordersCol: StorageCollection<Order>,
-): Promise<{ id: string; data: Order } | null> {
-	// Query by payment intent — since it's not indexed, we do a scan
-	// In production, you'd want to index paymentIntentId
-	let cursor: string | undefined;
-	do {
-		const batch = await ordersCol.query({ limit: 100, cursor });
-		for (const item of batch.items) {
-			if (item.data.paymentIntentId === intentId) {
-				return { id: item.id, data: item.data };
-			}
+export async function applyWebhookResult(ctx: RouteContext<unknown>, gatewayId: string, result: WebhookResult) {
+	switch (result.type) {
+		case "payment_succeeded": {
+			const found = await findOrderByPaymentRef(ctx, { intentId: result.intentId });
+			if (!found || found.data.paymentMethod !== gatewayId) return;
+			await markOrderPaid(ctx, found.id, {
+				source: "webhook",
+				amount: result.amount,
+				currency: result.currency,
+				captureId: result.captureId,
+			});
+			return;
 		}
-		cursor = batch.cursor;
-	} while (cursor);
-	return null;
+
+		case "payment_failed": {
+			const found = await findOrderByPaymentRef(ctx, { intentId: result.intentId });
+			if (!found || found.data.paymentMethod !== gatewayId) return;
+			await recordPaymentFailure(ctx, found.id, result.reason);
+			return;
+		}
+
+		case "refund_succeeded": {
+			const found = await findOrderByPaymentRef(ctx, {
+				intentId: result.intentId,
+				captureId: result.captureId,
+			});
+			if (!found || found.data.paymentMethod !== gatewayId) return;
+			await recordProviderRefund(ctx, found.id, result);
+			return;
+		}
+
+		default:
+			return;
+	}
+}
+
+/**
+ * Record a refund reported by the provider, skipping ones we already know
+ * about (e.g. refunds issued from the emCommerce admin).
+ */
+async function recordProviderRefund(
+	ctx: RouteContext<unknown>,
+	orderId: string,
+	result: Extract<WebhookResult, { type: "refund_succeeded" }>,
+) {
+	const col = ctx.storage.orders as StorageCollection<Order>;
+	for (let attempt = 0; attempt < 3; attempt++) {
+		const current = await col.getVersioned(orderId);
+		if (!current) return;
+		const order = current.value;
+
+		if (order.refunds.some((r) => r.refundId === result.refundId)) return;
+		const alreadyRefunded = order.refunds.reduce((s, r) => s + r.amount, 0);
+		const amount = result.cumulative ? result.amount - alreadyRefunded : result.amount;
+		if (amount <= 0) return;
+
+		const now = new Date().toISOString();
+		const totalRefunded = alreadyRefunded + amount;
+		const fullyRefunded = totalRefunded >= order.total;
+		const next: Order = {
+			...order,
+			refunds: [
+				...order.refunds,
+				{ id: ulid(), amount, reason: "Refund issued at payment provider", refundId: result.refundId, createdAt: now },
+			],
+			paymentStatus: fullyRefunded ? "refunded" : "partial_refund",
+			status: fullyRefunded ? "refunded" : order.status,
+			updatedAt: now,
+			adminNotes: [
+				...order.adminNotes,
+				{ id: ulid(), content: `Refund of ${amount} recorded from provider webhook`, isSystem: true, createdAt: now },
+			],
+		};
+		const res = await col.compareAndSet(orderId, current.revision, next);
+		if (res.applied) {
+			if (fullyRefunded) await sendOrderEmail(ctx, "refund_confirmation", next);
+			return;
+		}
+	}
 }

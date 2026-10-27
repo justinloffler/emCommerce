@@ -75,7 +75,10 @@ export default defineConfig({
 Plugin secret settings (Stripe/PayPal keys) need a valid `EMDASH_ENCRYPTION_KEY` in `.env`;
 generate one with `npx emdash secrets generate`.
 
-Add storefront pages to your Astro project:
+Add storefront pages to your Astro project. Server-side data comes from
+`@emdash-cms/plugin-emcommerce/server` (see `createStorefront()`), and the bundled page components
+live in `@emdash-cms/plugin-emcommerce/astro` (`ProductListPage`, `ProductDetailPage`, `CartPage`,
+`CheckoutPage`, `OrderConfirmationPage`). Style them by setting the `--ec-color-*` CSS variables.
 
 ```
 src/pages/shop/
@@ -91,24 +94,30 @@ src/pages/shop/
 ## TODO / Work in Progress
 
 ### Checkout & Payments
-- [ ] **Checkout does not complete** — Stripe `confirmCardPayment` and PayPal `onApprove` flows are wired up but untested end-to-end; no live keys configured in demo
-- [ ] PayPal SDK URL needs real `client-id` query param to load
-- [ ] No guest vs. authenticated checkout distinction
-- [ ] No address validation
+- [x] **Checkout flow** — quote → create order → Stripe Payment Element / PayPal Smart Buttons → server-side verification (`CheckoutPage`, `OrderConfirmationPage`)
+- [x] Payments are verified with the provider server-side (the browser can't mark an order paid); webhooks require valid signatures (Stripe HMAC, PayPal verify API)
+- [x] PayPal SDK loads with the store's real `client-id` and currency; orders are captured server-side
+- [x] Guest checkout creates/links a customer record (by email, without granting that customer's group pricing)
+- [x] Unpaid orders are resolved hourly: checked with the provider, then marked paid or cancelled with stock released
+- [ ] **Not yet tested against live Stripe/PayPal sandboxes** — covered by unit tests with mocked provider APIs; needs a run with real test keys
+- [ ] Customer accounts / authenticated checkout (group pricing for logged-in customers)
+- [ ] Address validation
+- [ ] Live carrier rates (ShipEngine) can be listed but not yet selected at checkout
 
 ### Emails
-- [ ] **No emails are sent** — order confirmation, shipping notification, refund confirmation, abandoned cart, and low-stock alert handlers exist but email delivery is not connected to any provider
+- [x] Order confirmation (on payment), shipping and refund emails are sent through emdash `ctx.email` when an email transport plugin is installed
+- [ ] Abandoned cart and welcome emails not implemented
 - [ ] Email templates are defined but not rendered/sent
 
 ### Tax
-- [ ] **Tax calculation is wired but not applied at checkout** — tax rules exist in the admin but the tax engine is not integrated into the checkout total in the storefront
+- [x] **Tax applied at checkout** — per-product tax classes, discounts allocated before tax, optional tax on shipping
+- [x] Tax-inclusive pricing (e.g. GST) — tax is extracted, not added; summaries show "Includes $X GST"
 - [ ] No VAT/GST number field
-- [ ] Tax-inclusive pricing toggle exists in settings but is not enforced in price display
 
 ### Shipping
 - [ ] **Live carrier rates (ShipEngine) not tested** — API key integration is built but unverified against real ShipEngine responses
 - [ ] No tracking number field on orders
-- [ ] Shipping weight not calculated from product weights automatically
+- [x] Shipping weight calculated from product/variant weights
 
 ### Pricing Engine
 - [ ] Pricing cache invalidation on rule save is stubbed but not fully tested
@@ -134,7 +143,8 @@ src/pages/shop/
 - [ ] Grouped and external product types not fully implemented
 
 ### General
-- [ ] No automated test suite yet (pricing engine unit tests are planned)
+- [x] Test suite (`npm test`) — tax, checkout totals, payment gateways, checkout/webhook flows, storefront visibility
+- [ ] Pricing engine and cart engine unit tests
 - [ ] No setup documentation beyond this README
 - [ ] Storefront CSS is inline — no theme customization system
 

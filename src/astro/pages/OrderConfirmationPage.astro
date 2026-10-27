@@ -1,0 +1,132 @@
+---
+/**
+ * OrderConfirmationPage — shown after checkout (expects ?order=<orderId>).
+ *
+ * Asks the server to verify the payment (idempotent — this also covers
+ * payment methods that redirect away from the checkout page), then shows the
+ * order. If the provider is still processing the payment, it polls briefly.
+ */
+interface Props {
+	shopPath?: string;
+}
+
+const { shopPath = "/shop" } = Astro.props;
+---
+
+<div class="ec-page ec-confirmation" data-confirmation data-shop={shopPath}>
+	<p class="ec-confirmation__status" data-status>Checking your payment…</p>
+	<div data-content hidden>
+		<header class="ec-confirmation__header">
+			<p class="ec-confirmation__eyebrow" data-eyebrow></p>
+			<h1 data-heading></h1>
+			<p data-lede></p>
+		</header>
+		<section class="ec-confirmation__card">
+			<ul class="ec-confirmation__items" data-items></ul>
+			<dl class="ec-confirmation__totals" data-totals></dl>
+		</section>
+		<a class="ec-confirmation__shop" data-shop-link>Continue shopping</a>
+	</div>
+</div>
+
+<style is:global>
+	.ec-confirmation { max-width: 40rem; margin: 0 auto; padding: 3rem 1rem 4rem; }
+	.ec-confirmation__status { color: var(--ec-color-muted, #6b7280); text-align: center; }
+	.ec-confirmation__header { text-align: center; margin-bottom: 2rem; }
+	.ec-confirmation__eyebrow { font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ec-color-muted, #6b7280); margin: 0 0 0.5rem; }
+	.ec-confirmation__header h1 { font-size: 1.75rem; margin: 0 0 0.5rem; }
+	.ec-confirmation__header p { margin: 0; color: var(--ec-color-text-secondary, #4b5563); }
+	.ec-confirmation__card { border: 1px solid var(--ec-color-border, #e5e7eb); border-radius: 0.5rem; padding: 1.25rem 1.5rem; }
+	.ec-confirmation__items { list-style: none; margin: 0 0 1rem; padding: 0; }
+	.ec-confirmation__items li { display: flex; justify-content: space-between; gap: 1rem; padding: 0.6rem 0; border-bottom: 1px solid var(--ec-color-border, #e5e7eb); }
+	.ec-confirmation__items small { display: block; color: var(--ec-color-muted, #6b7280); }
+	.ec-confirmation__totals { display: grid; grid-template-columns: 1fr auto; gap: 0.4rem 1rem; margin: 0; }
+	.ec-confirmation__totals dt { color: var(--ec-color-muted, #6b7280); }
+	.ec-confirmation__totals dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+	.ec-confirmation__totals .ec-total { font-weight: 700; font-size: 1.125rem; color: inherit; padding-top: 0.5rem; border-top: 1px solid var(--ec-color-border, #e5e7eb); }
+	.ec-confirmation__totals .ec-note { grid-column: 1 / -1; font-size: 0.8rem; color: var(--ec-color-muted, #6b7280); text-align: right; }
+	.ec-confirmation__shop { display: block; text-align: center; margin-top: 2rem; color: var(--ec-color-primary, #2563eb); font-weight: 500; }
+</style>
+
+<script>
+	const root = document.querySelector<HTMLElement>("[data-confirmation]");
+	if (root) void init(root);
+
+	async function init(root: HTMLElement) {
+		const client = await import("@emdash-cms/plugin-emcommerce/client");
+		const esc = client.escapeHtml;
+		const $ = (sel: string) => root.querySelector<HTMLElement>(sel)!;
+		const statusEl = $("[data-status]");
+		($("[data-shop-link]") as HTMLAnchorElement).href = root.dataset.shop || "/shop";
+
+		const orderId = new URLSearchParams(window.location.search).get("order");
+		if (!orderId) {
+			statusEl.textContent = "We couldn't find that order.";
+			return;
+		}
+
+		// Verify with the payment provider (polls while the payment is processing)
+		let paid = false;
+		for (let attempt = 0; attempt < 6 && !paid; attempt++) {
+			try {
+				const result = await client.confirmOrder(orderId);
+				paid = result.paid;
+				if (!paid && result.status !== "pending_payment") break;
+			} catch {
+				/* fall through to showing the order */
+			}
+			if (!paid) await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+		}
+
+		let order;
+		let config;
+		try {
+			[order, config] = await Promise.all([client.getOrder(orderId), client.getStorefrontConfig()]);
+		} catch {
+			statusEl.textContent = "We couldn't find that order.";
+			return;
+		}
+		const currency = { ...config.currency, code: order.currencyCode };
+		const money = (n: number) => client.formatMoney(n, currency);
+
+		$("[data-eyebrow]").textContent = `Order ${order.orderNumber}`;
+		if (order.paid) {
+			$("[data-heading]").textContent = "Thank you for your order!";
+			$("[data-lede]").textContent = "Your payment was received and we're getting your order ready.";
+		} else if (order.status === "on_hold") {
+			$("[data-heading]").textContent = "We've received your order";
+			$("[data-lede]").textContent = "Our team needs to review the payment before it ships. We'll be in touch if we need anything.";
+		} else if (order.status === "cancelled") {
+			$("[data-heading]").textContent = "This order was cancelled";
+			$("[data-lede]").textContent = "No payment was taken. You're welcome to place the order again.";
+		} else {
+			$("[data-heading]").textContent = "Payment processing";
+			$("[data-lede]").textContent = "Your payment is still being processed. This page will show the result once it's confirmed — you can safely refresh.";
+		}
+
+		$("[data-items]").innerHTML = order.items
+			.map((item) => {
+				const attrs = Object.entries(item.attributes ?? {}).map(([k, v]) => `${esc(k)}: ${esc(v)}`).join(", ");
+				return `<li><span>${esc(item.name)} × ${item.quantity}${attrs ? `<small>${attrs}</small>` : ""}</span><span>${money(item.totalPrice)}</span></li>`;
+			})
+			.join("");
+
+		const rows = [`<dt>Subtotal</dt><dd>${money(order.subtotal)}</dd>`];
+		if (order.discountTotal > 0) rows.push(`<dt>Discount</dt><dd>−${money(order.discountTotal)}</dd>`);
+		rows.push(
+			`<dt>Shipping${order.shippingMethodName ? ` (${esc(order.shippingMethodName)})` : ""}</dt><dd>${order.shippingTotal === 0 ? "Free" : money(order.shippingTotal)}</dd>`,
+		);
+		if (!order.taxInclusive) {
+			for (const line of order.taxLines ?? []) rows.push(`<dt>${esc(line.name)}</dt><dd>${money(line.amount)}</dd>`);
+		}
+		rows.push(`<dt class="ec-total">Total</dt><dd class="ec-total">${money(order.total)} <small>${esc(order.currencyCode)}</small></dd>`);
+		if (order.taxInclusive && order.taxTotal > 0) {
+			const names = (order.taxLines ?? []).map((l) => l.name).join(", ") || "tax";
+			rows.push(`<dd class="ec-note">Includes ${money(order.taxTotal)} ${esc(names)}</dd>`);
+		}
+		$("[data-totals]").innerHTML = rows.join("");
+
+		statusEl.hidden = true;
+		$("[data-content]").hidden = false;
+	}
+</script>

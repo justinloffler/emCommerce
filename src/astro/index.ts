@@ -18,3 +18,5 @@ export { default as ImageGallery } from "./ImageGallery.astro";
 export { default as ProductListPage } from "./pages/ProductListPage.astro";
 export { default as ProductDetailPage } from "./pages/ProductDetailPage.astro";
 export { default as CartPage } from "./pages/CartPage.astro";
+export { default as CheckoutPage } from "./pages/CheckoutPage.astro";
+export { default as OrderConfirmationPage } from "./pages/OrderConfirmationPage.astro";
