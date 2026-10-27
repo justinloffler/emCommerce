@@ -4,6 +4,7 @@
 
 import type { RouteContext, StorageCollection } from "emdash";
 import { PluginRouteError } from "emdash";
+import type { WhereClause } from "../types.js";
 import { ulid } from "ulidx";
 
 import type {
@@ -18,7 +19,7 @@ function coupons(ctx: RouteContext): StorageCollection<Coupon> {
 
 export async function couponListHandler(ctx: RouteContext<CouponListInput>) {
 	const input = ctx.input;
-	const where: Record<string, unknown> = {};
+	const where: WhereClause = {};
 	if (input.enabled !== undefined) where.enabled = input.enabled;
 
 	const result = await coupons(ctx).query({

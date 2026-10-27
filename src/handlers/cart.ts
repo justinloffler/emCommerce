@@ -6,6 +6,7 @@
 
 import type { RouteContext, StorageCollection } from "emdash";
 import { PluginRouteError } from "emdash";
+import { cartCalculationContext } from "./context.js";
 import { ulid } from "ulidx";
 
 import { CART_EXPIRY_DAYS } from "../constants.js";
@@ -73,18 +74,7 @@ async function getOrCreateCart(sessionId: string, ctx: RouteContext): Promise<{ 
 }
 
 function buildCalculationContext(ctx: RouteContext) {
-	return {
-		pricingStorage: {
-			products: ctx.storage.products as StorageCollection<Product>,
-			variants: ctx.storage.variants as StorageCollection<Variant>,
-			specificPrices: ctx.storage["specific-prices"] as StorageCollection,
-			catalogPriceRules: ctx.storage["catalog-price-rules"] as StorageCollection,
-		},
-		coupons: ctx.storage.coupons as StorageCollection<Coupon>,
-		customerGroupId: null,
-		customerId: null,
-		countryCode: null,
-	};
+	return cartCalculationContext(ctx);
 }
 
 async function saveAndCalculate(id: string, cart: Cart, ctx: RouteContext) {

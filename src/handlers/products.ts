@@ -4,6 +4,7 @@
 
 import type { RouteContext, StorageCollection } from "emdash";
 import { PluginRouteError } from "emdash";
+import type { WhereClause } from "../types.js";
 import { ulid } from "ulidx";
 
 import type {
@@ -50,7 +51,7 @@ function tags(ctx: RouteContext): StorageCollection<Tag> {
 
 export async function productListHandler(ctx: RouteContext<ProductListInput>) {
 	const input = ctx.input;
-	const where: Record<string, unknown> = {};
+	const where: WhereClause = {};
 
 	if (input.status) where.status = input.status;
 	if (input.type) where.type = input.type;
@@ -253,7 +254,7 @@ export async function productDeleteHandler(ctx: RouteContext<ProductDeleteInput>
 
 export async function variantListHandler(ctx: RouteContext<VariantListInput>) {
 	const input = ctx.input;
-	const where: Record<string, unknown> = { productId: input.productId };
+	const where: WhereClause = { productId: input.productId };
 	if (input.enabled !== undefined) where.enabled = input.enabled;
 
 	const result = await variants(ctx).query({
@@ -362,7 +363,7 @@ export async function variantDeleteHandler(ctx: RouteContext<VariantDeleteInput>
 
 export async function categoryListHandler(ctx: RouteContext<CategoryListInput>) {
 	const input = ctx.input;
-	const where: Record<string, unknown> = {};
+	const where: WhereClause = {};
 	if (input.parentId !== undefined) where.parentId = input.parentId;
 
 	const result = await categories(ctx).query({

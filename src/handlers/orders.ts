@@ -4,7 +4,9 @@
 
 import type { RouteContext, StorageCollection } from "emdash";
 import { PluginRouteError } from "emdash";
+import type { WhereClause } from "../types.js";
 import { ulid } from "ulidx";
+import { requireHttp } from "./context.js";
 
 import type {
 	OrderListInput, OrderGetInput, OrderUpdateStatusInput,
@@ -21,7 +23,7 @@ function orders(ctx: RouteContext): StorageCollection<Order> {
 
 export async function orderListHandler(ctx: RouteContext<OrderListInput>) {
 	const input = ctx.input;
-	const where: Record<string, unknown> = {};
+	const where: WhereClause = {};
 	if (input.status) where.status = input.status;
 	if (input.customerId) where.customerId = input.customerId;
 	if (input.customerEmail) where.customerEmail = input.customerEmail;
@@ -119,7 +121,7 @@ export async function orderRefundHandler(ctx: RouteContext<OrderRefundInput>) {
 	}
 
 	// Process refund through payment gateway
-	initGateways({ http: ctx.http, kv: ctx.kv });
+	initGateways({ http: requireHttp(ctx), kv: ctx.kv });
 	const gateway = getGateway(order.paymentMethod);
 	if (!gateway) throw PluginRouteError.badRequest("Payment gateway not found");
 

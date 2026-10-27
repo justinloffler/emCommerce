@@ -6,6 +6,7 @@
 
 import type { RouteContext, StorageCollection } from "emdash";
 import { PluginRouteError } from "emdash";
+import { cartCalculationContext, requireHttp } from "./context.js";
 import { ulid } from "ulidx";
 
 import type { CheckoutCreateInput, CheckoutConfirmInput } from "../schemas/checkout.js";
@@ -39,18 +40,7 @@ export async function checkoutCreateHandler(ctx: RouteContext<CheckoutCreateInpu
 	if (cart.items.length === 0) throw PluginRouteError.badRequest("Cart is empty");
 
 	// Calculate cart totals
-	const calcCtx = {
-		pricingStorage: {
-			products: ctx.storage.products as StorageCollection<Product>,
-			variants: ctx.storage.variants as StorageCollection<Variant>,
-			specificPrices: ctx.storage["specific-prices"] as StorageCollection,
-			catalogPriceRules: ctx.storage["catalog-price-rules"] as StorageCollection,
-		},
-		coupons: ctx.storage.coupons as StorageCollection<Coupon>,
-		customerGroupId: null,
-		customerId: null,
-		countryCode: input.billingAddress.countryCode,
-	};
+	const calcCtx = cartCalculationContext(ctx, { countryCode: input.billingAddress.countryCode });
 	const cartSummary = await calculateCart(cart, calcCtx);
 
 	// Calculate shipping
@@ -146,7 +136,7 @@ export async function checkoutCreateHandler(ctx: RouteContext<CheckoutCreateInpu
 	await orders(ctx).put(orderId, order);
 
 	// Initialize payment gateway and create intent
-	initGateways({ http: ctx.http, kv: ctx.kv });
+	initGateways({ http: requireHttp(ctx), kv: ctx.kv });
 	const gateway = getGateway(input.paymentGateway);
 	if (!gateway) throw PluginRouteError.badRequest(`Unknown payment gateway: ${input.paymentGateway}`);
 

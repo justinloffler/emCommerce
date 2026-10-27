@@ -65,4 +65,4 @@ __screenshots__/
 .emdash-bundle-tmp
 
 # Downloaded test data (fetched on demand in CI)
-examples/wp-theme-unit-test/
+examples/wp-theme-unit-test/*.tgz

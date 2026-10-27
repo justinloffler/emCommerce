@@ -5,8 +5,8 @@
  * side effects (stock adjustments, email notifications).
  */
 
-import type { Order, OrderStatus, AdminNote } from "../types.js";
-import { ORDER_TRANSITIONS } from "../constants.js";
+import type { Order, AdminNote } from "../types.js";
+import { ORDER_TRANSITIONS, type OrderStatus } from "../constants.js";
 import { ulid } from "ulidx";
 
 /** Error thrown when a status transition is not allowed. */

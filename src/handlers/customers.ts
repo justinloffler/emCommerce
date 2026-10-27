@@ -4,6 +4,7 @@
 
 import type { RouteContext, StorageCollection } from "emdash";
 import { PluginRouteError } from "emdash";
+import type { WhereClause } from "../types.js";
 import { ulid } from "ulidx";
 
 import type {
@@ -25,7 +26,7 @@ function groups(ctx: RouteContext): StorageCollection<CustomerGroup> {
 
 export async function customerListHandler(ctx: RouteContext<CustomerListInput>) {
 	const input = ctx.input;
-	const where: Record<string, unknown> = {};
+	const where: WhereClause = {};
 	if (input.groupId) where.groupId = input.groupId;
 
 	const result = await customers(ctx).query({
