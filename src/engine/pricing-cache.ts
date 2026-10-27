@@ -13,6 +13,11 @@ import type { PriceResolutionContext, ResolvedPrice } from "../types.js";
 
 const L2_TTL_SECONDS = 300; // 5 minutes
 
+interface CachedEntry {
+	price: ResolvedPrice;
+	expiresAt: number;
+}
+
 /** Build a deterministic cache key from resolution context + generation. */
 function buildKey(ctx: PriceResolutionContext, generation: number): string {
 	return `price:g${generation}:${ctx.productId}:${ctx.variantId ?? "_"}:${ctx.quantity}:${ctx.customerGroupId ?? "_"}:${ctx.countryCode ?? "_"}:${ctx.currencyCode}`;
@@ -52,11 +57,14 @@ export class PricingCache {
 		const l1Hit = this.l1.get(key);
 		if (l1Hit) return l1Hit;
 
-		// L2
-		const l2Hit = await this.kv.get<ResolvedPrice>(key);
-		if (l2Hit) {
-			this.l1.set(key, l2Hit);
-			return l2Hit;
+		// L2 — emdash KV has no native TTL, so entries carry their own expiry.
+		const l2Hit = await this.kv.get<CachedEntry>(key);
+		if (l2Hit && typeof l2Hit === "object" && "expiresAt" in l2Hit) {
+			if (l2Hit.expiresAt > Date.now()) {
+				this.l1.set(key, l2Hit.price);
+				return l2Hit.price;
+			}
+			await this.kv.delete(key);
 		}
 
 		return null;
@@ -70,6 +78,7 @@ export class PricingCache {
 		const key = buildKey(ctx, gen);
 
 		this.l1.set(key, price);
-		await this.kv.set(key, price, { expirationTtl: L2_TTL_SECONDS });
+		const entry: CachedEntry = { price, expiresAt: Date.now() + L2_TTL_SECONDS * 1000 };
+		await this.kv.set(key, entry);
 	}
 }

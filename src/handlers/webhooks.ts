@@ -6,9 +6,11 @@
 
 import type { RouteContext, StorageCollection } from "emdash";
 import { ulid } from "ulidx";
+import { requireHttp } from "./context.js";
 
 import type { Order } from "../types.js";
 import { initGateways, getGateway } from "../payments/gateway-registry.js";
+import type { WebhookResult } from "../payments/types.js";
 import { releaseStock } from "../engine/inventory.js";
 import type { Product, Variant } from "../types.js";
 
@@ -16,7 +18,7 @@ import type { Product, Variant } from "../types.js";
  * Handle Stripe webhook events.
  */
 export async function stripeWebhookHandler(ctx: RouteContext) {
-	initGateways({ http: ctx.http, kv: ctx.kv });
+	initGateways({ http: requireHttp(ctx), kv: ctx.kv });
 	const gateway = getGateway("stripe");
 	if (!gateway) return { received: false };
 
@@ -28,7 +30,7 @@ export async function stripeWebhookHandler(ctx: RouteContext) {
  * Handle PayPal webhook events.
  */
 export async function paypalWebhookHandler(ctx: RouteContext) {
-	initGateways({ http: ctx.http, kv: ctx.kv });
+	initGateways({ http: requireHttp(ctx), kv: ctx.kv });
 	const gateway = getGateway("paypal");
 	if (!gateway) return { received: false };
 
@@ -37,7 +39,7 @@ export async function paypalWebhookHandler(ctx: RouteContext) {
 }
 
 async function handleWebhookResult(
-	result: Awaited<ReturnType<typeof getGateway extends (...args: unknown[]) => infer R ? R : never>>,
+	result: WebhookResult | null | undefined,
 	ctx: RouteContext,
 ) {
 	if (!result || result.type === "ignored") {

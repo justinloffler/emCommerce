@@ -48,8 +48,13 @@
 
 ## Installation
 
+Requires **emdash 1.3+**, **Astro 6+** (tested on Astro 7) and **Node 22.12+**.
+
+The package isn't published to npm yet, so install it straight from GitHub. It keeps the
+`@emdash-cms/plugin-emcommerce` package name, so imports work as normal:
+
 ```bash
-npm install @emdash-cms/plugin-emcommerce
+npm install github:justinloffler/emCommerce
 ```
 
 ```ts
@@ -60,12 +65,15 @@ export default defineConfig({
   integrations: [
     emdash({
       plugins: [
-        emCommercePlugin({ defaultCurrency: "USD" }),
+        emCommercePlugin({ defaultCurrency: "AUD" }),
       ],
     }),
   ],
 });
 ```
+
+Plugin secret settings (Stripe/PayPal keys) need a valid `EMDASH_ENCRYPTION_KEY` in `.env`;
+generate one with `npx emdash secrets generate`.
 
 Add storefront pages to your Astro project:
 
@@ -134,7 +142,7 @@ src/pages/shop/
 
 ## Tech Stack
 
-- [emdash CMS](https://github.com/emdash-cms/emdash) — Astro 6+, SQLite, plugin system
+- [emdash CMS](https://github.com/emdash-cms/emdash) 1.3+ — Astro 6+/7, SQLite, plugin system
 - [Stripe](https://stripe.com) — payment processing
 - [PayPal JS SDK](https://developer.paypal.com/sdk/js/) — PayPal checkout
 - [ShipEngine](https://www.shipengine.com) — live carrier rates (optional)

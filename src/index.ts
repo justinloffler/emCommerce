@@ -15,7 +15,9 @@
  * ```
  */
 
-import type { PluginDescriptor, ResolvedPlugin } from "emdash";
+import type { PluginDescriptor, ResolvedPlugin, RouteContext, StorageCollection } from "emdash";
+import type { CustomerGroup } from "./types.js";
+import type { ProductListInput } from "./schemas/products.js";
 import { definePlugin } from "emdash";
 import { ulid } from "ulidx";
 
@@ -72,7 +74,6 @@ import {
 	shippingZoneUpdateHandler, shippingZoneDeleteHandler, shippingRatesHandler,
 	paymentConfigHandler,
 } from "./handlers/shipping.js";
-import { initShippingProviders } from "./payments/shipping-registry.js";
 import {
 	shippingZoneListSchema, shippingZoneCreateSchema,
 	shippingZoneUpdateSchema, shippingZoneDeleteSchema, shippingRatesSchema,
@@ -206,7 +207,7 @@ export function emCommercePlugin(
 		adminEntry: "@emdash-cms/plugin-emcommerce/admin",
 		componentsEntry: "@emdash-cms/plugin-emcommerce/astro",
 		options,
-		capabilities: ["email:send", "network:fetch", "page:inject", "read:users", "write:media"],
+		capabilities: ["email:send", "network:request"],
 		allowedHosts: ["api.stripe.com", "*.stripe.com", "api.paypal.com", "*.paypal.com", "api.exchangerate.host", "api.shipengine.com"],
 		adminPages: [
 			{ path: "/", label: "emCommerce", icon: "storefront" },
@@ -243,7 +244,7 @@ export function createPlugin(options: EmCommercePluginOptions = {}): ResolvedPlu
 	return definePlugin({
 		id: PLUGIN_ID,
 		version: PLUGIN_VERSION,
-		capabilities: ["email:send", "network:fetch", "page:inject", "read:users", "write:media"],
+		capabilities: ["email:send", "network:request"],
 		allowedHosts: ["api.stripe.com", "*.stripe.com", "api.paypal.com", "*.paypal.com", "api.exchangerate.host", "api.shipengine.com"],
 
 		storage: EMCOMMERCE_STORAGE_CONFIG,
@@ -338,7 +339,7 @@ export function createPlugin(options: EmCommercePluginOptions = {}): ResolvedPlu
 			"plugin:activate": {
 				handler: async (_event, ctx) => {
 					// Ensure the Default customer group exists (idempotent — safe to run every activation)
-					const allGroups = await ctx.storage["customer-groups"].query({ limit: 100 });
+					const allGroups = await (ctx.storage["customer-groups"] as StorageCollection<CustomerGroup>).query({ limit: 100 });
 					const hasDefault = allGroups.items.some((i) => i.data.isDefault);
 					if (!hasDefault) {
 						const now = new Date().toISOString();
@@ -351,9 +352,6 @@ export function createPlugin(options: EmCommercePluginOptions = {}): ResolvedPlu
 							updatedAt: now,
 						});
 					}
-
-					// Initialize extensible shipping providers (ShipEngine no-ops if no API key)
-					initShippingProviders({ http: ctx.http, kv: ctx.kv });
 
 					if (ctx.cron) {
 						// Daily cart cleanup (remove expired carts)
@@ -401,7 +399,7 @@ export function createPlugin(options: EmCommercePluginOptions = {}): ResolvedPlu
 			"storefront/products": {
 				public: true,
 				input: productListSchema,
-				handler: async (ctx) => {
+				handler: async (ctx: RouteContext<ProductListInput>) => {
 					// Override: only show active products on storefront
 					ctx.input.status = "active";
 					return productListHandler(ctx);

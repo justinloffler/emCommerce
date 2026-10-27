@@ -6,6 +6,7 @@
  * Dates are ISO 8601 strings. IDs are ULIDs.
  */
 
+import type { StorageCollection } from "emdash";
 import type {
 	CouponType,
 	EmailType,
@@ -16,6 +17,20 @@ import type {
 	ReductionType,
 	ShippingMethodType,
 } from "./constants.js";
+
+export type {
+	CouponType,
+	EmailType,
+	OrderStatus,
+	PaymentStatus,
+	ProductStatus,
+	ProductType,
+	ReductionType,
+	ShippingMethodType,
+} from "./constants.js";
+
+/** Storage query `where` clause (emdash doesn't export this type directly). */
+export type WhereClause = NonNullable<Parameters<StorageCollection["count"]>[0]>;
 
 // ─── Products ───────────────────────────────────────────────────
 
@@ -320,7 +335,7 @@ export interface Customer {
 	firstName: string;
 	lastName: string;
 	phone: string | null;
-	groupId: string;
+	groupId: string | null;
 	addresses: CustomerAddress[];
 	defaultBillingAddressId: string | null;
 	defaultShippingAddressId: string | null;

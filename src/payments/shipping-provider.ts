@@ -59,7 +59,7 @@ export class ShipEngineProvider implements ShippingProvider {
 	constructor(private config: ShippingProviderConfig) {}
 
 	async getRates(params: ShippingRateParams): Promise<ExternalShippingRate[]> {
-		const apiKey = await this.config.kv.get("settings:shipEngineApiKey");
+		const apiKey = await this.config.kv.get<string>("settings:shipEngineApiKey");
 		if (!apiKey) return [];
 
 		// Build from-address from store settings (fall back to placeholder)

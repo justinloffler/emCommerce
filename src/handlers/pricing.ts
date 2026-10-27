@@ -6,6 +6,7 @@
 
 import type { RouteContext, StorageCollection } from "emdash";
 import { PluginRouteError } from "emdash";
+import type { WhereClause } from "../types.js";
 import { ulid } from "ulidx";
 
 import type {
@@ -42,7 +43,7 @@ async function bumpPriceGeneration(ctx: RouteContext) {
 
 export async function specificPriceListHandler(ctx: RouteContext<SpecificPriceListInput>) {
 	const input = ctx.input;
-	const where: Record<string, unknown> = {};
+	const where: WhereClause = {};
 	if (input.productId) where.productId = input.productId;
 
 	const result = await specificPrices(ctx).query({
@@ -136,7 +137,7 @@ export async function specificPriceDeleteHandler(ctx: RouteContext<SpecificPrice
 
 export async function catalogPriceRuleListHandler(ctx: RouteContext<CatalogPriceRuleListInput>) {
 	const input = ctx.input;
-	const where: Record<string, unknown> = {};
+	const where: WhereClause = {};
 	if (input.enabled !== undefined) where.enabled = input.enabled;
 
 	const result = await catalogPriceRules(ctx).query({

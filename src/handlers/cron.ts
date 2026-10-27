@@ -53,6 +53,10 @@ export async function handleExchangeRateSync(ctx: PluginContext): Promise<void> 
 	const codes = toUpdate.map((i) => i.data.code).join(",");
 
 	try {
+		if (!ctx.http) {
+			ctx.log.warn("Exchange rate sync skipped: outbound HTTP unavailable");
+			return;
+		}
 		const res = await ctx.http.fetch(
 			`https://api.exchangerate.host/latest?base=${defaultCurrency}&symbols=${codes}`,
 		);
@@ -101,9 +105,12 @@ export async function handleLowStockCheck(ctx: PluginContext): Promise<void> {
 		(p) => `- ${p.name} (SKU: ${p.sku ?? "N/A"}): ${p.stockQuantity} remaining (threshold: ${p.lowStockThreshold})`,
 	);
 
-	if (ctx.email) {
+	const alertsEnabled = (await ctx.kv.get<boolean>("email:low_stock_alert:enabled")) ?? true;
+	const storeEmail = await ctx.kv.get<string>("settings:storeEmail");
+	if (ctx.email && alertsEnabled && storeEmail) {
 		const storeName = (await ctx.kv.get<string>("settings:storeName")) ?? "Your Store";
 		await ctx.email.send({
+			to: storeEmail,
 			subject: `[${storeName}] Low stock alert: ${lowStock.length} products`,
 			text: `The following products are at or below their low stock threshold:\n\n${lines.join("\n")}`,
 		});

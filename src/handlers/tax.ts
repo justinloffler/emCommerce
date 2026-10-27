@@ -4,6 +4,7 @@
 
 import type { RouteContext, StorageCollection } from "emdash";
 import { PluginRouteError } from "emdash";
+import type { WhereClause } from "../types.js";
 import { ulid } from "ulidx";
 
 import type {
@@ -78,7 +79,7 @@ export async function taxClassDeleteHandler(ctx: RouteContext<TaxClassDeleteInpu
 
 export async function taxRuleListHandler(ctx: RouteContext<TaxRuleListInput>) {
 	const input = ctx.input;
-	const where: Record<string, unknown> = {};
+	const where: WhereClause = {};
 	if (input.taxClassId) where.taxClassId = input.taxClassId;
 	if (input.countryCode) where.countryCode = input.countryCode;
 

@@ -13,6 +13,7 @@
 
 import type { RouteContext, StorageCollection } from "emdash";
 import { PluginRouteError } from "emdash";
+import type { WhereClause } from "../types.js";
 import { ulid } from "ulidx";
 
 import type {
@@ -143,7 +144,7 @@ function paginatedResponse(items: any[], total: number, page: number, perPage: n
 
 export async function apiProductList(ctx: RouteContext<ApiProductListInput>) {
 	const { page, per_page, status, type, search, featured } = ctx.input;
-	const where: Record<string, unknown> = {};
+	const where: WhereClause = {};
 	if (status) where.status = status;
 	if (type) where.type = type;
 	// Note: boolean fields filtered in-memory (SQLite can't bind booleans)
@@ -222,7 +223,7 @@ export async function apiProductCreate(ctx: RouteContext<ApiProductCreateInput>)
 		createdAt: now, updatedAt: now,
 	};
 	await products(ctx).put(id, product);
-	await fireWebhooks(ctx, "product.created", { id, ...formatProduct(id, product) });
+	await fireWebhooks(ctx, "product.created", formatProduct(id, product));
 	return { data: formatProduct(id, product) };
 }
 
@@ -254,7 +255,7 @@ export async function apiProductUpdate(ctx: RouteContext<ApiProductUpdateInput>)
 		updatedAt: new Date().toISOString(),
 	};
 	await products(ctx).put(id, updated);
-	await fireWebhooks(ctx, "product.updated", { id, ...formatProduct(id, updated) });
+	await fireWebhooks(ctx, "product.updated", formatProduct(id, updated));
 	return { data: formatProduct(id, updated) };
 }
 
@@ -272,7 +273,7 @@ export async function apiProductDelete(ctx: RouteContext<ApiProductDeleteInput>)
 
 export async function apiOrderList(ctx: RouteContext<ApiOrderListInput>) {
 	const { page, per_page, status, customer } = ctx.input;
-	const where: Record<string, unknown> = {};
+	const where: WhereClause = {};
 	if (status) where.status = status;
 	if (customer) where.customerEmail = customer;
 
@@ -375,7 +376,7 @@ export async function apiOrderUpdate(ctx: RouteContext<ApiOrderUpdateInput>) {
 
 export async function apiCustomerList(ctx: RouteContext<ApiCustomerListInput>) {
 	const { page, per_page, search, email } = ctx.input;
-	const where: Record<string, unknown> = {};
+	const where: WhereClause = {};
 	if (email) where.email = email;
 
 	const total = await customers(ctx).count(Object.keys(where).length ? where : undefined);

@@ -12,7 +12,7 @@ import type {
 } from "../schemas/shipping.js";
 import type { ShippingZone } from "../types.js";
 import { getShippingRates } from "../engine/shipping-engine.js";
-import { listShippingProviders } from "../payments/shipping-registry.js";
+import { initShippingProviders, listShippingProviders } from "../payments/shipping-registry.js";
 
 function zones(ctx: RouteContext): StorageCollection<ShippingZone> {
 	return ctx.storage["shipping-zones"] as StorageCollection<ShippingZone>;
@@ -81,6 +81,7 @@ export async function shippingRatesHandler(ctx: RouteContext<ShippingRatesInput>
 	const methods = zoneResult?.methods ?? [];
 
 	// Augment with live carrier rates from external providers
+	if (ctx.http) initShippingProviders({ http: ctx.http, kv: ctx.kv });
 	const providers = listShippingProviders();
 	for (const provider of providers) {
 		try {
